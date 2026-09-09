@@ -11,7 +11,7 @@ from app.models import User
 from app.schemas.auth import OTPRequest, OTPVerify, Token, UserOut
 from app.services import auth_service
 from app.services.email_service import send_email
-from app.services.twilio_service import send_whatsapp_message
+from app.services.whatsapp_service import send_message
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -43,7 +43,7 @@ def request_otp(payload: OTPRequest, db: Session = Depends(get_db)) -> dict:
     if user.email:
         send_email(user.email, "Your LimkoBot verification code", message)
     else:
-        send_whatsapp_message(user.phone, message)
+        send_message(user.phone, message)
 
     return {"detail": "OTP sent", "expires_in_minutes": OTP_TTL_MINUTES}
 

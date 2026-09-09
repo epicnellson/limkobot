@@ -15,14 +15,12 @@ class Settings:
     DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
     SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-    SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+    SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", os.getenv("SUPABASE_KEY", ""))
+    SUPABASE_KEY = SUPABASE_ANON_KEY
+    SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
     DATABASE_URL = os.getenv("DATABASE_URL", "")
     DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "5"))
-
-    TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-    TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
-    TWILIO_WHATSAPP_FROM = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
 
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")

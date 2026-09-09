@@ -143,7 +143,8 @@ Base URL: `http://localhost:8000` (prod: Render / `BACKEND_URL`). All endpoints 
 |--------|----------------------|------|------------------------------------|
 | GET    | `/`                  | —    | API info                           |
 | GET    | `/health`            | —    | Health check                       |
-| POST   | `/webhook/twilio`    | —    | Twilio WhatsApp webhook (TwiML)    |
+| GET    | `/webhook/whatsapp`   | —    | Meta webhook verification (challenge) |
+| POST   | `/webhook/whatsapp`   | —    | Meta WhatsApp message webhook         |
 
 ### 4.2 Auth
 
