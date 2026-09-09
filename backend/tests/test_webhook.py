@@ -2,10 +2,9 @@ from fastapi.testclient import TestClient
 
 from main import app
 
-client = TestClient(app)
-
 
 def test_twilio_webhook_returns_twiml():
+    client = TestClient(app)
     response = client.post(
         "/webhook/twilio",
         data={"From": "+260776000000", "Body": "What programmes do you offer?"},
@@ -16,6 +15,7 @@ def test_twilio_webhook_returns_twiml():
 
 
 def test_twilio_webhook_empty_body():
+    client = TestClient(app)
     response = client.post(
         "/webhook/twilio", data={"From": "+260776000000", "Body": ""}
     )
