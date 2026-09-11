@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -8,10 +8,13 @@ from app.database import get_db
 from app.dependencies import require_admin
 from app.models import Conversation, Document, Feedback, Message, User
 from app.schemas.auth import UserOut
+from app.schemas.sentiment import SentimentFlagOut
+from app.services import stub_data
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 ALLOWED_ROLES = ("student", "admin")
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 @router.get("/dashboard/stats", response_model=dict)
@@ -83,6 +86,35 @@ def message_analytics(
         .all()
     )
     return {"by_sender": {sender: count for sender, count in rows}}
+
+
+@router.post("/knowledge-base", response_model=dict, status_code=201)
+async def upload_knowledge_base(
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    category: str | None = Form(default=None),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File exceeds 10 MB limit",
+        )
+    return stub_data.add_knowledge_document(
+        title=title,
+        category=category,
+        content=content.decode("utf-8", errors="replace"),
+    )
+
+
+@router.get("/flags", response_model=list[SentimentFlagOut])
+def list_sentiment_flags(
+    resolved: bool | None = None,
+    severity: str | None = None,
+    _admin: User = Depends(require_admin),
+) -> list[dict]:
+    return stub_data.list_flags(resolved=resolved, severity=severity)
 
 
 @router.get("/analytics/feedback", response_model=dict)

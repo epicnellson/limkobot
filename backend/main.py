@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import admin, auth, conversations, documents, messages, webhook
+from app.routers import admin, auth, chat, conversations, documents, messages, webhook
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -21,6 +21,7 @@ app.add_middleware(
 
 app.include_router(webhook.router)
 app.include_router(auth.router)
+app.include_router(chat.router)
 app.include_router(conversations.router)
 app.include_router(messages.router)
 app.include_router(documents.router)
