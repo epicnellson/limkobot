@@ -21,118 +21,77 @@ LimkoBot answers prospective and current students' questions about admissions, p
 
 ## 3. Database Schema
 
-All primary keys are UUIDs (`gen_random_uuid()`), timestamps are `TIMESTAMPTZ DEFAULT now()`. Embeddings are stored as `vector(1536)` using the pgvector extension.
+All primary keys are UUIDs (`gen_random_uuid()`). Timestamps use `TIMESTAMP DEFAULT NOW()`. Embeddings are stored as `VECTOR(384)` using the pgvector extension.
 
-### 3.1 users
+### 3.1 students
+| Column | Type | Notes |
+|---|---|---|
+| student_id | UUID PK | |
+| full_name | VARCHAR(150) NOT NULL | |
+| phone_number | VARCHAR(20) UNIQUE NOT NULL | WhatsApp number |
+| programme | VARCHAR(100) | |
+| otp_verified | BOOLEAN DEFAULT FALSE | |
+| created_at | TIMESTAMP DEFAULT NOW() | |
 
-Identifies students and admins. Auth is phone + OTP based (no passwords).
+### 3.2 admin_users
+| Column | Type | Notes |
+|---|---|---|
+| admin_id | UUID PK | |
+| name | VARCHAR(150) NOT NULL | |
+| role | VARCHAR(50) | |
+| email | VARCHAR(150) UNIQUE NOT NULL | |
 
-| Column          | Type                | Notes                                              |
-|-----------------|---------------------|----------------------------------------------------|
-| id              | UUID PK             | `default: gen_random_uuid()`                      |
-| phone           | TEXT UNIQUE NOT NULL | WhatsApp number (E.164, e.g. `+260...`)          |
-| full_name       | TEXT                |                                                    |
-| student_id      | TEXT UNIQUE         | Student number; NULL for admins                    |
-| email           | TEXT                | Used for OTP delivery                              |
-| role            | TEXT NOT NULL       | `student` \| `admin`, default `student`            |
-| is_verified     | BOOLEAN             | default `false`                                    |
-| otp_code        | TEXT                | 6-digit code                                       |
-| otp_expires_at  | TIMESTAMPTZ         |                                                    |
-| created_at      | TIMESTAMPTZ         | default `now()`                                    |
-| updated_at      | TIMESTAMPTZ         | default `now()`                                    |
+### 3.3 knowledge_documents
+| Column | Type | Notes |
+|---|---|---|
+| doc_id | UUID PK | |
+| title | VARCHAR(255) NOT NULL | |
+| category | VARCHAR(100) | |
+| embedding_vector | VECTOR(384) | |
+| updated_at | TIMESTAMP DEFAULT NOW() | |
 
-### 3.2 conversations
+### 3.4 conversation_logs
+| Column | Type | Notes |
+|---|---|---|
+| log_id | UUID PK | |
+| student_id | UUID FK → students | ON DELETE CASCADE |
+| message_text | TEXT NOT NULL | |
+| intent_type | VARCHAR(50) | |
+| sentiment_score | DECIMAL(5,4) | |
+| timestamp | TIMESTAMP DEFAULT NOW() | |
 
-A chat session between a user and the bot.
+### 3.5 document_requests
+| Column | Type | Notes |
+|---|---|---|
+| request_id | UUID PK | |
+| student_id | UUID FK → students | ON DELETE CASCADE |
+| doc_type | VARCHAR(50) NOT NULL | |
+| status | VARCHAR(20) DEFAULT 'pending' | |
+| generated_at | TIMESTAMP | |
 
-| Column           | Type                | Notes                                        |
-|------------------|---------------------|----------------------------------------------|
-| id               | UUID PK             |                                              |
-| user_id          | UUID FK → users.id  | `ON DELETE CASCADE`                          |
-| channel          | TEXT NOT NULL       | default `whatsapp`                           |
-| status           | TEXT NOT NULL       | `active` \| `closed`, default `active`       |
-| metadata         | JSONB               | session metadata                             |
-| started_at       | TIMESTAMPTZ         | default `now()`                              |
-| last_message_at  | TIMESTAMPTZ         | updated on each message                      |
+### 3.6 sentiment_flags
+| Column | Type | Notes |
+|---|---|---|
+| flag_id | UUID PK | |
+| log_id | UUID FK → conversation_logs | ON DELETE CASCADE |
+| severity | VARCHAR(20) | |
+| reviewed_by | UUID FK → admin_users | |
+| resolved | BOOLEAN DEFAULT FALSE | |
 
-### 3.3 messages
+### 3.7 conversation_retrieved_docs (junction table)
+| Column | Type | Notes |
+|---|---|---|
+| log_id | UUID FK → conversation_logs | ON DELETE CASCADE |
+| doc_id | UUID FK → knowledge_documents | ON DELETE CASCADE |
 
-Individual user/bot messages within a conversation.
-
-| Column          | Type                    | Notes                                      |
-|-----------------|-------------------------|--------------------------------------------|
-| id              | BIGSERIAL PK            |                                            |
-| conversation_id | UUID FK → conversations.id | `ON DELETE CASCADE`                     |
-| sender          | TEXT NOT NULL           | `user` \| `bot` \| `system`                |
-| body            | TEXT NOT NULL           | message text                               |
-| message_type    | TEXT NOT NULL           | `text`, default                            |
-| intent          | TEXT                    | detected intent (null if unknown)          |
-| confidence      | FLOAT                   | model confidence 0–1                       |
-| is_answered     | BOOLEAN                 | whether bot produced a helpful answer      |
-| created_at      | TIMESTAMPTZ             | default `now()`                            |
-
-### 3.4 documents
-
-Knowledge-base sources ingested into the RAG pipeline.
-
-| Column        | Type               | Notes                                          |
-|---------------|--------------------|------------------------------------------------|
-| id            | UUID PK            |                                                |
-| title         | TEXT NOT NULL      | document title                                |
-| source_type   | TEXT NOT NULL      | `website` \| `pdf` \| `faq` \| `text` \| ...   |
-| source_url    | TEXT               | original location                             |
-| category      | TEXT               | e.g. `admissions`, `fees`, `programmes`        |
-| content       | TEXT               | full source text                               |
-| chunked       | BOOLEAN            | has chunks been generated                      |
-| created_at    | TIMESTAMPTZ        | default `now()`                                |
-| updated_at    | TIMESTAMPTZ        | default `now()`                                |
-
-### 3.5 chunks
-
-Sentence/section-level chunks with embeddings for retrieval.
-
-| Column        | Type                 | Notes                                    |
-|---------------|----------------------|------------------------------------------|
-| id            | UUID PK              |                                          |
-| document_id   | UUID FK → documents.id | `ON DELETE CASCADE`                    |
-| content       | TEXT NOT NULL        | chunk text                               |
-| embedding     | VECTOR(1536)         | OpenAI `text-embedding-ada-002` output   |
-| metadata      | JSONB                | section headings, page numbers, etc.     |
-| created_at    | TIMESTAMPTZ          | default `now()`                          |
-
-### 3.6 feedback
-
-User-reported quality of bot answers.
-
-| Column         | Type                 | Notes                       |
-|----------------|----------------------|-----------------------------|
-| id             | UUID PK              |                             |
-| message_id     | BIGINT FK → messages.id |                          |
-| conversation_id| UUID FK → conversations.id |                        |
-| rating         | SMALLINT             | 1–5                        |
-| comment        | TEXT                 | optional                    |
-| created_at     | TIMESTAMPTZ          | default `now()`             |
-
-### 3.7 refresh_tokens
-
-Long-lived tokens for dashboard sessions (optional).
-
-| Column     | Type                 | Notes                      |
-|------------|----------------------|----------------------------|
-| id         | UUID PK              |                            |
-| user_id    | UUID FK → users.id   | `ON DELETE CASCADE`        |
-| token      | TEXT NOT NULL        | hashed refresh token       |
-| expires_at | TIMESTAMPTZ          |                            |
-| created_at | TIMESTAMPTZ          | default `now()`            |
+PK is (log_id, doc_id).
 
 ### 3.8 Indexes
+- `conversation_logs(student_id)`
+- `document_requests(student_id)`
+- `sentiment_flags(log_id)`
 
-- `users.phone` unique
-- `users.student_id` unique
-- `messages(conversation_id, created_at)`
-- `chunks.embedding` (pgvector HNSW/IVFFlat) — cosine distance
-- `documents(category, source_type)`
-
+> **Note (RLS):** Row Level Security is not yet enabled — access is currently server-side only via the `service_role` key. To be added before real student data enters the system (user-testing phase).
 ## 4. API Endpoints
 
 Base URL: `http://localhost:8000` (prod: Render / `BACKEND_URL`). All endpoints return JSON unless stated otherwise.
