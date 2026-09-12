@@ -31,4 +31,4 @@ class ChatReply(BaseModel):
     user_message: ChatMessage
     bot_message: ChatMessage
     sources: list[Source]
-    routing: Literal["rule", "rag"]
+    routing: Literal["rule", "rag", "menu"]
