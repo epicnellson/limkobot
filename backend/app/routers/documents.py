@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Chunk, Document
 from app.schemas.document import DocumentCreate, DocumentOut
+from app.schemas.document_request import DocumentRequestCreate, DocumentRequestOut
+from app.services import stub_data
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -17,6 +19,16 @@ def _get_document(document_id: UUID, db: Session) -> Document:
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
     return document
+
+
+@router.post("/request", response_model=DocumentRequestOut, status_code=201)
+def request_document(payload: DocumentRequestCreate) -> dict:
+    return stub_data.create_document_request(payload.phone_number, payload.doc_type)
+
+
+@router.get("/status", response_model=list[DocumentRequestOut])
+def document_request_status(phone_number: str) -> list[dict]:
+    return stub_data.list_document_requests(phone_number)
 
 
 @router.get("", response_model=list[DocumentOut])
