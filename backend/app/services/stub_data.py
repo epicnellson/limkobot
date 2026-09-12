@@ -61,6 +61,45 @@ RULE_INTENTS = {
 
 NEGATIVE_WORDS = ("bad", "anger", "complaint", "disappointed", "annoyed", "refund", "terrible")
 
+# Numbered menu: student sends a single digit, bot answers with that option.
+MENU = {
+    "1": {
+        "intent": "fees",
+        "reply": (
+            "Fees (2026): application fee USD 100; tuition varies by programme and campus. "
+            "Reply with your programme for the exact schedule, or DOCUMENTS to request the fee table."
+        ),
+    },
+    "2": {
+        "intent": "exam_schedule",
+        "reply": (
+            "Exam schedule: 2026 final exams run 8-19 June. "
+            "Check faculty notice boards or reply with your programme for the paper timetable."
+        ),
+    },
+    "3": {
+        "intent": "registration",
+        "reply": (
+            "Registration: returning students register online through the student portal "
+            "before semester start. Reply REGISTRATION for a step-by-step guide."
+        ),
+    },
+    "4": {
+        "intent": "programmes",
+        "reply": (
+            "Programmes: diplomas, degrees and postgraduate courses across computing, design, "
+            "business, communication and architecture. Reply with a faculty for the full list."
+        ),
+    },
+    "5": {
+        "intent": "help",
+        "reply": (
+            "How can I help? Reply a number: 1 = Fees, 2 = Exam schedule, "
+            "3 = Registration, 4 = Programmes."
+        ),
+    },
+}
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -132,12 +171,18 @@ def ask(phone_number: str, message_text: str) -> dict:
     intent_type = None
     routing = "rag"
 
-    for name, rule in RULE_INTENTS.items():
-        if any(keyword in text for keyword in rule["keywords"]):
-            intent_type = name
-            routing = "rule"
-            bot_reply = rule["reply"]
-            break
+    menu_option = MENU.get(text.strip())
+    if menu_option:
+        intent_type = menu_option["intent"]
+        routing = "menu"
+        bot_reply = menu_option["reply"]
+    else:
+        for name, rule in RULE_INTENTS.items():
+            if any(keyword in text for keyword in rule["keywords"]):
+                intent_type = name
+                routing = "rule"
+                bot_reply = rule["reply"]
+                break
 
     for word in NEGATIVE_WORDS:
         if word in text:
