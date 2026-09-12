@@ -1,8 +1,9 @@
 import logging
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+from app.services.auth_service import generate_otp
 from app.services.rag_service import answer as rag_answer
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,9 @@ _conversation_logs = {}
 _document_requests = {}
 _sentiment_flags = {}
 _knowledge_documents = {}
+_otps = {}
+
+OTP_TTL_SECONDS = 5 * 60
 
 DOC_TYPES = (
     "prospectus",
@@ -78,6 +82,7 @@ def reset() -> None:
         _document_requests.clear()
         _sentiment_flags.clear()
         _knowledge_documents.clear()
+        _otps.clear()
 
 
 def get_or_create_student(phone_number: str) -> dict:
@@ -96,7 +101,77 @@ def get_or_create_student(phone_number: str) -> dict:
         return student
 
 
-def _log_message(student_id: str, message_text: str, intent_type=None, sentiment_score=None) -> dict:
+def get_student_by_id(student_id: str) -> dict | None:
+    with _lock:
+        for student in _students.values():
+            if student["student_id"] == student_id:
+                return student
+    return None
+
+
+def request_otp(phone_number: str) -> dict:
+    """Create/fetch the student and store a fresh 6-digit code (5-min expiry).
+
+    Returns {"student": ..., "code": ...} so the router can deliver the code.
+    """
+    student = get_or_create_student(phone_number)
+    now = datetime.now(timezone.utc)
+    code = generate_otp()
+    with _lock:
+        _otps[student["student_id"]] = {
+            "code": code,
+            "expires_at": (now + timedelta(seconds=OTP_TTL_SECONDS)).isoformat(),
+            "used": False,
+            "created_at": now.isoformat(),
+        }
+    return {"student": student, "code": code}
+
+
+def verify_otp(phone_number: str, code: str) -> dict | None:
+    """Validate an unexpired, unused OTP. On success marks it used and sets
+    students.otp_verified=True, returning the student. Returns None otherwise.
+    """
+    student = _students.get(phone_number)
+    if student is None:
+        return None
+    with _lock:
+        otp = _otps.get(student["student_id"])
+        if otp is None:
+            return None
+        expires_at = datetime.fromisoformat(otp["expires_at"])
+        if otp["used"] or otp["code"] != code or expires_at < datetime.now(timezone.utc):
+            return None
+        otp["used"] = True
+    student["otp_verified"] = True
+    return student
+
+
+def get_active_otp(phone_number: str) -> dict | None:
+    """Return a copy of the current OTP row for a phone number (tests)."""
+    student = _students.get(phone_number)
+    if student is None:
+        return None
+    with _lock:
+        otp = _otps.get(student["student_id"])
+        return dict(otp) if otp else None
+
+
+def force_expire_otp(phone_number: str) -> None:
+    """Backdate the current OTP's expiry so it reads as expired (tests)."""
+    student = _students.get(phone_number)
+    if student is None:
+        return
+    with _lock:
+        otp = _otps.get(student["student_id"])
+        if otp is not None:
+            otp["expires_at"] = (
+                datetime.now(timezone.utc) - timedelta(seconds=1)
+            ).isoformat()
+
+
+def _log_message(
+    student_id: str, message_text: str, intent_type=None, sentiment_score=None
+) -> dict:
     log = {
         "log_id": _new_id(),
         "student_id": student_id,

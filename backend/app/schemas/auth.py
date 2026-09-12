@@ -6,13 +6,23 @@ PHONE_PATTERN = re.compile(r"^\+\d{10,15}$")
 
 
 class OTPRequest(BaseModel):
-    phone: str = Field(..., pattern=r"^\+\d{10,15}$")
-    email: str | None = None
+    phone_number: str = Field(..., pattern=r"^\+\d{10,15}$")
 
 
 class OTPVerify(BaseModel):
-    phone: str = Field(..., pattern=r"^\+\d{10,15}$")
+    phone_number: str = Field(..., pattern=r"^\+\d{10,15}$")
     code: str = Field(..., min_length=6, max_length=6)
+
+
+class OTPRequestSent(BaseModel):
+    status: str
+    expires_in_minutes: int
+
+
+class OTPVerified(BaseModel):
+    status: str
+    token: str
+    expires_in: int
 
 
 class Token(BaseModel):
