@@ -125,7 +125,9 @@ Errors: **401** invalid/expired/used code, unknown phone, malformed/missing JWT.
 
 ## 5. `POST /chat/ask` — ask a question
 
-Routes to rule-based answering (greetings, FAQ keywords) or RAG retrieval. Both turns are logged to
+Routes to rule-based answering (greetings, FAQ keywords), the numbered menu
+(a single digit `1`–`5` → fees / exam schedule / registration / programmes / help),
+or RAG retrieval. Both turns are logged to
 `conversation_logs` (one row per message; there is **no** session table in the schema).
 
 Auth: **No** (invoked from the WhatsApp webhook; identity = `phone_number`). Dashboard sessions use `/messages` (Bearer).
@@ -144,7 +146,7 @@ Response — **200**:
 | `user_message` | object   | Logged user turn (see `ChatMessage` below)        |
 | `bot_message`  | object   | Logged bot turn (same shape)                      |
 | `sources`      | array    | RAG citations `{id, title, category, source_url, score}` (empty for rule-based) |
-| `routing`      | string   | `rule` \| `rag`                                   |
+| `routing`      | string   | `rule` \| `rag` \| `menu`             |
 
 `ChatMessage` (per `conversation_logs` row):
 
