@@ -81,19 +81,20 @@ Auth: **No**
 
 Request body (schema `OTPRequest`):
 
-| Field   | Type   | Required | Constraint                | Persists to              |
-|---------|--------|----------|---------------------------|--------------------------|
-| `phone` | string | Yes      | E.164 (`^\+\d{10,15}$`)  | `students.phone_number`  |
-| `email` | string | No       | —                         | OTP delivery channel     |
+| Field         | Type   | Required | Constraint                | Persists to              |
+|---------------|--------|----------|---------------------------|--------------------------|
+| `phone_number`| string | Yes      | E.164 (`^\+\d{10,15}$`)  | `students.phone_number`  |
 
-Response — **200**:
+Response — **200** (schema `OTPRequestSent`):
 
 | Field                | Type | Example                 |
 |----------------------|------|-------------------------|
-| `detail`             | string | `"OTP sent"`          |
+| `status`             | string | `"sent"`              |
 | `expires_in_minutes` | int  | `5`                     |
 
-Server-side: generate 6-digit code, set expiry (5 min), mark `students.otp_verified=false` until verify.
+Server-side: upsert `students` row on `phone_number` (new rows start `otp_verified=false`),
+generate a 6-digit code, store it in the `otps` table (`code`, `expires_at` 5 min, `used=false`),
+then send the code **over WhatsApp** via `send_message()` (never email).
 
 ---
 
@@ -103,20 +104,22 @@ Auth: **No**
 
 Request body (schema `OTPVerify`):
 
-| Field   | Type   | Required | Constraint                  |
-|---------|--------|----------|-----------------------------|
-| `phone` | string | Yes      | E.164                       |
-| `code`  | string | Yes      | Exactly 6 digits            |
+| Field         | Type   | Required | Constraint                  |
+|---------------|--------|----------|-----------------------------|
+| `phone_number`| string | Yes      | E.164                       |
+| `code`        | string | Yes      | Exactly 6 digits            |
 
-Response — **200** (schema `Token`):
+Response — **200** (schema `OTPVerified`):
 
-| Field          | Type   | Description                        |
-|----------------|--------|------------------------------------|
-| `access_token` | string | JWT (HS256, `sub` = student id)   |
-| `token_type`   | string | `bearer`                           |
-| `expires_in`   | int    | Seconds (JWT TTL × 60)             |
+| Field          | Type   | Description                                     |
+|----------------|--------|-------------------------------------------------|
+| `status`       | string | `"verified"`                                    |
+| `token`        | string | JWT (HS256, 24-hour, payload `student_id`)      |
+| `expires_in`   | int    | Seconds (86,400)                                |
 
-Sets `students.otp_verified=true`. Errors: **400** invalid/expired code, **404** unknown phone.
+Server-side: match an unexpired, **unused** code in `otps` for that student → mark it `used`,
+set `students.otp_verified=true`, issue the JWT (protect endpoints via `get_current_student()`).
+Errors: **401** invalid/expired/used code, unknown phone, malformed/missing JWT.
 
 ---
 
@@ -266,10 +269,10 @@ Response — **200**: array of flags (empty `[]`). `message_text`/`timestamp` ar
 
 | Code | Body shape (`{"detail": "..."}`)                        | When                                  |
 |------|---------------------------------------------------------|---------------------------------------|
-| 400  | Invalid/expired OTP, bad payload                         | `otp/verify`                          |
-| 401  | Missing/invalid JWT                                     | `admin/*`                             |
+| 400  | Bad payload                                             | `otp/verify` (phone E.164 / code format) |
+| 401  | Invalid/expired/used OTP, unknown phone, missing/invalid JWT | `otp/verify`, `admin/*`          |
 | 403  | Wrong verify token OR non-admin on admin route          | webhook GET, `admin/*`                |
-| 404  | Phone/user/conversation/message unknown                 | `otp/verify`, `chat/ask`, `messages`  |
+| 404  | Phone/user/conversation/message unknown                 | `chat/ask`, `messages`                |
 | 413  | Uploaded knowledge-base file too large                  | `admin/knowledge-base`                |
 | 422  | Pydantic validation failure (field/type/pattern)        | Any JSON body                         |
 
@@ -278,7 +281,7 @@ Response — **200**: array of flags (empty `[]`). `message_text`/`timestamp` ar
 | Endpoint(s)                                    | Table(s) touched                       |
 |------------------------------------------------|----------------------------------------|
 | `GET/POST /webhook/whatsapp`                   | `students`, `conversation_logs`        |
-| `POST /auth/otp/request`, `/auth/otp/verify`   | `students`                             |
+| `POST /auth/otp/request`, `/auth/otp/verify`   | `students`, `otps`                     |
 | `POST /chat/ask`                               | `conversation_logs`, `sentiment_flags` |
 | `POST /documents/request`, `GET /documents/status` | `document_requests`               |
 | `POST /admin/knowledge-base`                   | `knowledge_documents`                  |
