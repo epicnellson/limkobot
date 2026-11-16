@@ -3,18 +3,27 @@ import os
 
 from fastapi import APIRouter, Request, Response
 
+from app.services import stub_data, whatsapp_service
+
 router = APIRouter(tags=["webhook"])
 
 logger = logging.getLogger(__name__)
 
 
 def process_message(from_number: str, message_text: str) -> None:
-    """Route an incoming WhatsApp message for processing.
-
-    TODO: detect intent, run RAG retrieval/answer generation, and send the
-    bot reply back via whatsapp_service.send_message().
-    """
+    """Answer an incoming WhatsApp message with a menu/rule/RAG reply."""
     logger.info("Received WhatsApp message from=%s body=%r", from_number, message_text)
+
+    if not message_text.strip():
+        logger.info("No text content from %s; not replying", from_number)
+        return
+
+    try:
+        result = stub_data.ask(from_number, message_text)
+        reply = result["bot_message"]["message_text"]
+        whatsapp_service.send_message(from_number, reply)
+    except Exception:
+        logger.exception("Failed to reply to %s", from_number)
 
 
 @router.get("/webhook/whatsapp")

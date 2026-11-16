@@ -141,3 +141,33 @@ def test_webhook_empty_body(monkeypatch):
             "/webhook/whatsapp", content=b"", headers={"Content-Type": "application/json"}
         )
     assert response.status_code == 200
+
+
+def test_process_message_sends_reply(monkeypatch):
+    sent = {}
+
+    def fake_send(to_number, text):
+        sent["to"] = to_number
+        sent["text"] = text
+
+    monkeypatch.setattr(webhook.whatsapp_service, "send_message", fake_send)
+    webhook.process_message("155501234567", "Hi")
+
+    assert sent["to"] == "155501234567"
+    assert "Limkokwing" in sent["text"]
+
+
+def test_process_message_survives_send_failure(monkeypatch):
+    def failing_send(to_number, text):
+        raise RuntimeError("graph api down")
+
+    monkeypatch.setattr(webhook.whatsapp_service, "send_message", failing_send)
+    webhook.process_message("155501234567", "Hi")
+
+
+def test_process_message_ignores_empty_text(monkeypatch):
+    def unexpected_send(to_number, text):
+        raise AssertionError("should not send for empty text")
+
+    monkeypatch.setattr(webhook.whatsapp_service, "send_message", unexpected_send)
+    webhook.process_message("155501234567", "   ")
