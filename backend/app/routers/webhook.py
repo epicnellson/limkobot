@@ -30,6 +30,10 @@ async def verify_webhook(request: Request) -> Response:
     return Response(status_code=403)
 
 
+def _expected_phone_number_id() -> str:
+    return os.getenv("WHATSAPP_PHONE_NUMBER_ID", "").strip()
+
+
 @router.post("/webhook/whatsapp")
 async def whatsapp_webhook(request: Request) -> Response:
     try:
@@ -37,15 +41,25 @@ async def whatsapp_webhook(request: Request) -> Response:
     except Exception:
         payload = {}
 
-    entry = (payload.get("entry") or [{}])[0]
-    changes = (entry.get("changes") or [{}])[0]
-    value = changes.get("value") or {}
-    messages = value.get("messages") or []
+    expected_id = _expected_phone_number_id()
 
-    if messages:
-        message = messages[0]
-        from_number = message.get("from", "")
-        message_text = message.get("text", {}).get("body", "")
-        process_message(from_number, message_text)
+    for entry in payload.get("entry") or []:
+        for change in entry.get("changes") or []:
+            value = change.get("value") or {}
+            metadata = value.get("metadata") or {}
+            phone_number_id = str(metadata.get("phone_number_id") or "")
+
+            if expected_id and phone_number_id != expected_id:
+                logger.info(
+                    "Ignoring webhook for phone_number_id=%s (expected %s)",
+                    phone_number_id,
+                    expected_id,
+                )
+                continue
+
+            for message in value.get("messages") or []:
+                from_number = message.get("from", "")
+                message_text = message.get("text", {}).get("body", "")
+                process_message(from_number, message_text)
 
     return Response(content="OK", status_code=200)

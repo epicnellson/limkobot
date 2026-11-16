@@ -105,12 +105,24 @@ def test_webhook_message(monkeypatch):
         captured["from"] = from_number
         captured["text"] = message_text
 
+    monkeypatch.setenv("WHATSAPP_PHONE_NUMBER_ID", "123456789012345")
     monkeypatch.setattr(webhook, "process_message", fake_process_message)
     with TestClient(app) as client:
         response = client.post("/webhook/whatsapp", json=MESSAGE_PAYLOAD)
     assert response.status_code == 200
     assert captured["from"] == "155501234567"
     assert captured["text"] == "What programmes do you offer?"
+
+
+def test_webhook_ignores_other_phone_number(monkeypatch):
+    def fake_process_message(from_number, message_text):
+        raise AssertionError("process_message should not be called")
+
+    monkeypatch.setenv("WHATSAPP_PHONE_NUMBER_ID", "1347248705147718")
+    monkeypatch.setattr(webhook, "process_message", fake_process_message)
+    with TestClient(app) as client:
+        response = client.post("/webhook/whatsapp", json=MESSAGE_PAYLOAD)
+    assert response.status_code == 200
 
 
 def test_webhook_status_update_no_messages(monkeypatch):
