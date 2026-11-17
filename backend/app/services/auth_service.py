@@ -1,11 +1,34 @@
 import datetime
 import random
 
+import bcrypt
 from jose import JWTError, jwt
 
 from app.config import settings
 
 STUDENT_TOKEN_EXPIRE_MINUTES = 24 * 60
+
+BCRYPT_MAX_BYTES = 72
+
+
+def _password_bytes(password: str) -> bytes:
+    """bcrypt only reads the first 72 bytes and rejects longer input in v5."""
+    return password.encode("utf-8")[:BCRYPT_MAX_BYTES]
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(_password_bytes(password), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(password: str, hashed_password: str | None) -> bool:
+    if not hashed_password:
+        return False
+    try:
+        return bcrypt.checkpw(
+            _password_bytes(password), hashed_password.encode("utf-8")
+        )
+    except (ValueError, TypeError):
+        return False
 
 
 def generate_otp(length: int = 6) -> str:

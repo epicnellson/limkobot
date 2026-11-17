@@ -1,13 +1,24 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.bootstrap import init_database
 from app.config import settings
 from app.routers import admin, auth, chat, conversations, documents, messages, webhook
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    init_database()
+    yield
+
 
 app = FastAPI(
     title=settings.APP_NAME,
     description="Hybrid RAG WhatsApp Chatbot for Limkokwing University",
     version=settings.APP_VERSION,
+    lifespan=lifespan,
 )
 
 # CORS for admin dashboard

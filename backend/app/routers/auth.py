@@ -1,8 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
-from app.dependencies import get_current_user
+from app.config import settings
+from app.database import get_db
+from app.dependencies import _user_out, get_current_account
 from app.models import User
-from app.schemas.auth import OTPRequest, OTPRequestSent, OTPVerify, OTPVerified, UserOut
+from app.schemas.auth import (
+    OTPRequest,
+    OTPRequestSent,
+    OTPVerify,
+    OTPVerified,
+    StaffLogin,
+    StaffLoginResponse,
+    UserOut,
+)
 from app.services import auth_service, stub_data
 from app.services.whatsapp_service import send_message
 
@@ -42,6 +54,29 @@ def verify_otp(payload: OTPVerify) -> OTPVerified:
     )
 
 
+@router.post("/staff/login", response_model=StaffLoginResponse)
+def staff_login(
+    payload: StaffLogin, db: Session = Depends(get_db)
+) -> StaffLoginResponse:
+    """Email + password login for dashboard staff (admin routes check the role)."""
+    email = payload.email.strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == email).first()
+    if user is None or not auth_service.verify_password(
+        payload.password, user.hashed_password
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+
+    token = auth_service.create_access_token(str(user.id), user.phone, user.role)
+    return StaffLoginResponse(
+        token=token,
+        expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user=_user_out(user),
+    )
+
+
 @router.get("/me", response_model=UserOut)
-def get_me(user: User = Depends(get_current_user)) -> User:
-    return user
+def get_me(account: UserOut = Depends(get_current_account)) -> UserOut:
+    return account

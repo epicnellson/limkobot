@@ -30,6 +30,12 @@ class Settings:
     JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
+    # Seeded admin account for the dashboard (created on startup when a DB exists)
+    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "")
+    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+    ADMIN_PHONE = os.getenv("ADMIN_PHONE", "+23225000000")
+    ADMIN_NAME = os.getenv("ADMIN_NAME", "LimkoBot Administrator")
+
     EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
     EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
     EMAIL_USER = os.getenv("EMAIL_USER", "")

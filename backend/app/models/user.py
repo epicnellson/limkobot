@@ -19,7 +19,8 @@ class User(Base):
     )
     full_name: Mapped[str | None] = mapped_column(String(120))
     student_id: Mapped[str | None] = mapped_column(String(50), unique=True)
-    email: Mapped[str | None] = mapped_column(String(120))
+    email: Mapped[str | None] = mapped_column(String(120), index=True)
+    hashed_password: Mapped[str | None] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'student'")
     )

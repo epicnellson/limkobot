@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Chunk, Document
+from app.dependencies import get_current_student, require_admin
+from app.models import Chunk, Document, User
 from app.schemas.document import DocumentCreate, DocumentOut
 from app.schemas.document_request import DocumentRequestCreate, DocumentRequestOut
 from app.services import stub_data
@@ -21,24 +22,42 @@ def _get_document(document_id: UUID, db: Session) -> Document:
     return document
 
 
+def _ensure_owner(phone_number: str, student: dict) -> None:
+    if phone_number != student["phone_number"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only access your own document requests",
+        )
+
+
 @router.post("/request", response_model=DocumentRequestOut, status_code=201)
-def request_document(payload: DocumentRequestCreate) -> dict:
-    return stub_data.create_document_request(payload.phone_number, payload.doc_type)
+def request_document(
+    payload: DocumentRequestCreate, student: dict = Depends(get_current_student)
+) -> dict:
+    _ensure_owner(payload.phone_number, student)
+    return stub_data.create_document_request(student["phone_number"], payload.doc_type)
 
 
 @router.get("/status", response_model=list[DocumentRequestOut])
-def document_request_status(phone_number: str) -> list[dict]:
+def document_request_status(
+    phone_number: str, student: dict = Depends(get_current_student)
+) -> list[dict]:
+    _ensure_owner(phone_number, student)
     return stub_data.list_document_requests(phone_number)
 
 
 @router.get("", response_model=list[DocumentOut])
-def list_documents(db: Session = Depends(get_db)) -> list[Document]:
+def list_documents(
+    _admin: User = Depends(require_admin), db: Session = Depends(get_db)
+) -> list[Document]:
     return db.query(Document).order_by(Document.created_at.desc()).all()
 
 
 @router.post("", response_model=DocumentOut, status_code=201)
 def create_document(
-    payload: DocumentCreate, db: Session = Depends(get_db)
+    payload: DocumentCreate,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
 ) -> Document:
     document = Document(
         title=payload.title,
@@ -54,25 +73,41 @@ def create_document(
 
 
 @router.get("/{document_id}", response_model=DocumentOut)
-def get_document(document_id: UUID, db: Session = Depends(get_db)) -> Document:
+def get_document(
+    document_id: UUID,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Document:
     return _get_document(document_id, db)
 
 
 @router.delete("/{document_id}", status_code=204)
-def delete_document(document_id: UUID, db: Session = Depends(get_db)) -> None:
+def delete_document(
+    document_id: UUID,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> None:
     document = _get_document(document_id, db)
     db.delete(document)
     db.commit()
 
 
 @router.post("/{document_id}/rechunk", response_model=dict)
-def rechunk_document(document_id: UUID, db: Session = Depends(get_db)) -> dict:
+def rechunk_document(
+    document_id: UUID,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
     _get_document(document_id, db)
     return {"detail": "Chunking and embedding will be implemented in Phase 3"}
 
 
 @router.get("/{document_id}/chunks", response_model=list[dict])
-def list_chunks(document_id: UUID, db: Session = Depends(get_db)) -> list[dict]:
+def list_chunks(
+    document_id: UUID,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> list[dict]:
     _get_document(document_id, db)
     chunks = (
         db.query(Chunk).filter(Chunk.document_id == document_id).order_by(Chunk.created_at).all()

@@ -6,14 +6,27 @@ from main import app
 client = TestClient(app)
 
 
+PHONE = "+260760333333"
+
+
 def setup_function(_):
     stub_data.reset()
+
+
+def _headers() -> dict:
+    client.post("/auth/otp/request", json={"phone_number": PHONE})
+    code = stub_data.get_active_otp(PHONE)["code"]
+    verified = client.post(
+        "/auth/otp/verify", json={"phone_number": PHONE, "code": code}
+    )
+    return {"Authorization": f"Bearer {verified.json()['token']}"}
 
 
 def _ask(text):
     return client.post(
         "/chat/ask",
-        json={"phone_number": "+260760333333", "message_text": text},
+        json={"phone_number": PHONE, "message_text": text},
+        headers=_headers(),
     ).json()
 
 

@@ -18,11 +18,19 @@ Field names match the implemented Supabase schema in [`docs/SYSTEM_SPECS.md`](./
 | 2 | POST   | `/webhook/whatsapp`  | No   | Incoming messages, Meta WhatsApp Cloud API (JSON body)       |
 | 3 | POST   | `/auth/otp/request`  | No   | Request 6-digit OTP by phone                                  |
 | 4 | POST   | `/auth/otp/verify`   | No   | Verify OTP → JWT access token                                 |
-| 5 | POST   | `/chat/ask`          | No   | Answer a question (routes to rule-based or RAG)               |
-| 6 | POST   | `/documents/request` | No   | Student requests a document (fee schedule, transcript, …)     |
-| 7 | GET    | `/documents/status`  | No   | List a student's document requests + status                   |
+| 5 | POST   | `/chat/ask`          | Yes  | Answer a question (routes to rule-based or RAG)               |
+| 6 | POST   | `/documents/request` | Yes  | Student requests a document                                   |
+| 7 | GET    | `/documents/status`  | Yes  | List a student's document requests + status                   |
 | 8 | POST   | `/admin/knowledge-base` | Yes | Admin uploads a knowledge-base document (RAG ingest)        |
 | 9 | GET    | `/admin/flags`       | Yes  | List sentiment flags raised on messages                       |
+| 10 | POST  | `/auth/staff/login`  | No   | Dashboard staff login (email + password) -> JWT              |
+| 11 | GET   | `/auth/me`           | Yes  | Current account (accepts a staff JWT or a student JWT)       |
+| 12 | GET   | `/documents`         | Yes  | Admin: list knowledge-base documents (CRUD is admin-only)    |
+
+**Yes** = `Authorization: Bearer <token>`. Admin routes (`/admin/*`, `/documents` CRUD) require a
+staff token whose `role` is `admin` (**403** otherwise). `/chat/ask`, `/documents/request` and
+`/documents/status` require a **student** JWT (24-hour token from `/auth/otp/verify`) and only
+accept the caller's own `phone_number` (**403** when the payload names another number).
 
 ---
 
@@ -130,7 +138,8 @@ Routes to rule-based answering (greetings, FAQ keywords), the numbered menu
 or RAG retrieval. Both turns are logged to
 `conversation_logs` (one row per message; there is **no** session table in the schema).
 
-Auth: **No** (invoked from the WhatsApp webhook; identity = `phone_number`). Dashboard sessions use `/messages` (Bearer).
+Auth: **Yes** - student JWT (`Authorization: Bearer <token>`); `phone_number` must match the
+token owner. The WhatsApp webhook calls the routing service directly, so it needs no token.
 
 Request body:
 
@@ -168,7 +177,7 @@ Response — **200**:
 
 Student asks the university for a document (prospectus, fee schedule, transcript, handbook). Creates a row in `document_requests`.
 
-Auth: **No** (phone-identified via WhatsApp session).
+Auth: **Yes** - student JWT; `phone_number` must match the token owner.
 
 Request body:
 
@@ -191,7 +200,7 @@ Response — **201** (`document_requests` row):
 
 ## 7. `GET /documents/status` — check document requests
 
-Auth: **No** (phone identity)
+Auth: **Yes** - student JWT; `phone_number` must match the token owner.
 
 Query params:
 
@@ -267,15 +276,67 @@ Response — **200**: array of flags (empty `[]`). `message_text`/`timestamp` ar
 
 ---
 
+## 10. `POST /auth/staff/login` - dashboard login
+
+Auth: **No**
+
+Request body (`StaffLogin`):
+
+| Field      | Type   | Required | Constraint        |
+|------------|--------|----------|-------------------|
+| `email`    | string | Yes      | 3-120 chars, case-insensitive |
+| `password` | string | Yes      | 8-72 chars        |
+
+Response **200** (`StaffLoginResponse`):
+
+| Field        | Type   | Description                                                    |
+|--------------|--------|----------------------------------------------------------------|
+| `token`      | string | JWT (`sub` = user id, `phone`, `role`); lifetime from `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (default 60 min) |
+| `token_type` | string | `bearer`                                                        |
+| `expires_in` | int    | Seconds                                                         |
+| `user`       | object | `UserOut` (see `/auth/me`)                                      |
+
+The first administrator is seeded at startup from `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+(optional `ADMIN_PHONE`, `ADMIN_NAME`) whenever `DATABASE_URL` is set; tables are created then too.
+Errors: **401** unknown email or wrong password, **503** database not configured.
+
+Login succeeds for any staff role; each admin route then enforces `role == "admin"` itself.
+
+---
+
+## 11. `GET /auth/me` - current account
+
+Auth: **Yes**
+
+Accepts either token type and returns `UserOut`:
+
+| Field         | Type    | Description                                             |
+|---------------|---------|---------------------------------------------------------|
+| `id`          | string  | `users.id` (staff) or the WhatsApp student id (student) |
+| `phone`       | string  | E.164                                                   |
+| `full_name`   | string  | nullable                                                |
+| `student_id`  | string  | nullable                                                |
+| `email`       | string  | nullable                                                |
+| `role`        | string  | `student` \| `admin`                                    |
+| `is_verified` | boolean | OTP-verified (student) / seeded account (staff)         |
+
+A student token (`student_id` claim) resolves to `role: "student"` from the WhatsApp session store;
+a staff token (`sub` claim) is resolved against `users`.
+Errors: **401** missing/invalid token or account not found, **503** database not configured while
+resolving a staff token.
+
+---
+
 ## Error reference
 
 | Code | Body shape (`{"detail": "..."}`)                        | When                                  |
 |------|---------------------------------------------------------|---------------------------------------|
 | 400  | Bad payload                                             | `otp/verify` (phone E.164 / code format) |
 | 401  | Invalid/expired/used OTP, unknown phone, missing/invalid JWT | `otp/verify`, `admin/*`          |
-| 403  | Wrong verify token OR non-admin on admin route          | webhook GET, `admin/*`                |
+| 403  | Wrong verify token, non-admin on an admin route, or `phone_number` not owned by the token | webhook GET, `admin/*`, `chat/ask`, `documents/request\|status` |
 | 404  | Phone/user/conversation/message unknown                 | `chat/ask`, `messages`                |
 | 413  | Uploaded knowledge-base file too large                  | `admin/knowledge-base`                |
+| 503  | Database is not configured (no `DATABASE_URL`)          | `auth/staff/login`, `admin/*`, `documents` CRUD |
 | 422  | Pydantic validation failure (field/type/pattern)        | Any JSON body                         |
 
 ## Mapping to SYSTEM_SPECS tables
@@ -288,3 +349,4 @@ Response — **200**: array of flags (empty `[]`). `message_text`/`timestamp` ar
 | `POST /documents/request`, `GET /documents/status` | `document_requests`               |
 | `POST /admin/knowledge-base`                   | `knowledge_documents`                  |
 | `GET /admin/flags`                             | `sentiment_flags`, `conversation_logs` |
+| `POST /auth/staff/login`, `GET /auth/me`        | `users` (staff) / in-memory student store |

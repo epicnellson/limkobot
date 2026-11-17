@@ -11,6 +11,15 @@ def _as_admin():
     return type("Admin", (), {"role": "admin"})()
 
 
+def _student_headers(phone_number: str) -> dict:
+    client.post("/auth/otp/request", json={"phone_number": phone_number})
+    code = stub_data.get_active_otp(phone_number)["code"]
+    verified = client.post(
+        "/auth/otp/verify", json={"phone_number": phone_number, "code": code}
+    )
+    return {"Authorization": f"Bearer {verified.json()['token']}"}
+
+
 def setup_function(_):
     stub_data.reset()
     app.dependency_overrides[require_admin] = _as_admin
@@ -21,9 +30,11 @@ def teardown_function(_):
 
 
 def test_chat_ask_rule_greeting():
+    phone = "+260760000001"
     response = client.post(
         "/chat/ask",
-        json={"phone_number": "+260760000001", "message_text": "Hi there"},
+        json={"phone_number": phone, "message_text": "Hi there"},
+        headers=_student_headers(phone),
     )
     assert response.status_code == 200
     payload = response.json()
@@ -35,9 +46,11 @@ def test_chat_ask_rule_greeting():
 
 
 def test_chat_ask_rag_fallback():
+    phone = "+260760000002"
     response = client.post(
         "/chat/ask",
-        json={"phone_number": "+260760000002", "message_text": "What is quantum mechanics?"},
+        json={"phone_number": phone, "message_text": "What is quantum mechanics?"},
+        headers=_student_headers(phone),
     )
     assert response.status_code == 200
     payload = response.json()
@@ -47,9 +60,11 @@ def test_chat_ask_rag_fallback():
 
 
 def test_chat_ask_negative_message_flags():
+    phone = "+260760000003"
     client.post(
         "/chat/ask",
-        json={"phone_number": "+260760000003", "message_text": "This service is terrible"},
+        json={"phone_number": phone, "message_text": "This service is terrible"},
+        headers=_student_headers(phone),
     )
     flags = stub_data.list_flags()
     assert len(flags) == 1
@@ -57,10 +72,32 @@ def test_chat_ask_negative_message_flags():
     assert "terrible" in flags[0]["message_text"]
 
 
+def test_chat_ask_requires_student_token():
+    response = client.post(
+        "/chat/ask",
+        json={"phone_number": "+260760000010", "message_text": "Hi"},
+    )
+    assert response.status_code == 401
+
+
+def test_chat_ask_rejects_another_students_number():
+    headers = _student_headers("+260760000011")
+    response = client.post(
+        "/chat/ask",
+        json={"phone_number": "+260760000012", "message_text": "Hi"},
+        headers=headers,
+    )
+    assert response.status_code == 403
+
+
 def test_document_request_and_status():
+    phone = "+260760000004"
+    headers = _student_headers(phone)
+
     create = client.post(
         "/documents/request",
-        json={"phone_number": "+260760000004", "doc_type": "fee_schedule"},
+        json={"phone_number": phone, "doc_type": "fee_schedule"},
+        headers=headers,
     )
     assert create.status_code == 201
     request_id = create.json()["request_id"]
@@ -68,7 +105,7 @@ def test_document_request_and_status():
     assert create.json()["doc_type"] == "fee_schedule"
 
     status_response = client.get(
-        "/documents/status", params={"phone_number": "+260760000004"}
+        "/documents/status", params={"phone_number": phone}, headers=headers
     )
     assert status_response.status_code == 200
     requests = status_response.json()
@@ -77,11 +114,30 @@ def test_document_request_and_status():
 
 
 def test_document_status_empty_for_other_phone():
+    phone = "+260760000005"
     response = client.get(
-        "/documents/status", params={"phone_number": "+260760000005"}
+        "/documents/status", params={"phone_number": phone}, headers=_student_headers(phone)
     )
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_document_request_requires_token():
+    response = client.post(
+        "/documents/request",
+        json={"phone_number": "+260760000013", "doc_type": "prospectus"},
+    )
+    assert response.status_code == 401
+
+
+def test_document_request_rejects_another_students_number():
+    headers = _student_headers("+260760000014")
+    response = client.post(
+        "/documents/request",
+        json={"phone_number": "+260760000015", "doc_type": "prospectus"},
+        headers=headers,
+    )
+    assert response.status_code == 403
 
 
 def test_admin_knowledge_base_upload():
@@ -106,9 +162,11 @@ def test_admin_knowledge_base_too_large():
 
 
 def test_admin_flags_listing_and_filter():
+    phone = "+260760000006"
     client.post(
         "/chat/ask",
-        json={"phone_number": "+260760000006", "message_text": "Really bad support"},
+        json={"phone_number": phone, "message_text": "Really bad support"},
+        headers=_student_headers(phone),
     )
     response = client.get("/admin/flags")
     assert response.status_code == 200

@@ -1,4 +1,5 @@
 import re
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -34,10 +35,22 @@ class Token(BaseModel):
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
+    id: UUID
     phone: str
     full_name: str | None = None
     student_id: str | None = None
     email: str | None = None
     role: str
     is_verified: bool
+
+
+class StaffLogin(BaseModel):
+    email: str = Field(..., min_length=3, max_length=120)
+    password: str = Field(..., min_length=8, max_length=72)
+
+
+class StaffLoginResponse(BaseModel):
+    token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserOut
