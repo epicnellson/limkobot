@@ -70,7 +70,8 @@ MENU = {
         "intent": "fees",
         "reply": (
             "Fees (2026): application fee USD 100; tuition varies by programme and campus. "
-            "Reply with your programme for the exact schedule, or DOCUMENTS to request the fee table."
+            "Reply with your programme for the exact schedule, "
+            "or DOCUMENTS to request the fee table."
         ),
     },
     "2": {
@@ -260,7 +261,11 @@ def ask(phone_number: str, message_text: str) -> dict:
     for word in NEGATIVE_WORDS:
         if word in text:
             flag = add_flag(user_message, "high")
-            logger.info("Created sentiment flag %s on log %s", flag["flag_id"], user_message["log_id"])
+            logger.info(
+                "Created sentiment flag %s on log %s",
+                flag["flag_id"],
+                user_message["log_id"],
+            )
             user_message["sentiment_score"] = -0.8
             break
 
