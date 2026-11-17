@@ -21,6 +21,7 @@ class Settings:
 
     DATABASE_URL = os.getenv("DATABASE_URL", "")
     DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "5"))
+    DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5"))
 
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
