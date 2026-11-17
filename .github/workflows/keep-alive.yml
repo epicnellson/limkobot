@@ -1,0 +1,31 @@
+name: Keep Render Awake
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping health endpoint
+        run: |
+          set -euo pipefail
+          base="https://limkobot.onrender.com"
+          for path in /health /; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 --retry 2 --retry-delay 5 "$base$path" || true)
+            echo "GET $path -> ${code:-no-response}"
+            if [ "$code" = "200" ]; then
+              exit 0
+            fi
+          done
+          echo "Keep-alive failed: health and root both unreachable" >&2
+          exit 1
