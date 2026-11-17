@@ -17,7 +17,6 @@ _students = {}
 _conversation_logs = {}
 _document_requests = {}
 _sentiment_flags = {}
-_knowledge_documents = {}
 _otps = {}
 
 OTP_TTL_SECONDS = 5 * 60
@@ -120,7 +119,6 @@ def reset() -> None:
         _conversation_logs.clear()
         _document_requests.clear()
         _sentiment_flags.clear()
-        _knowledge_documents.clear()
         _otps.clear()
 
 
@@ -300,19 +298,6 @@ def list_document_requests(phone_number: str) -> list[dict]:
             for request in _document_requests.values()
             if request["student_id"] == student["student_id"]
         ]
-
-
-def add_knowledge_document(title: str, category: str | None, content: str) -> dict:
-    document = {
-        "doc_id": _new_id(),
-        "title": title,
-        "category": category,
-        "embedded": False,
-        "updated_at": _now(),
-    }
-    with _lock:
-        _knowledge_documents[document["doc_id"]] = document
-    return document
 
 
 def list_flags(resolved: bool | None = None, severity: str | None = None) -> list[dict]:

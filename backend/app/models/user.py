@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, String, text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -36,4 +36,8 @@ class User(Base):
         DateTime(timezone=True),
         server_default=text("now()"),
         onupdate=datetime.utcnow,
+    )
+
+    conversations = relationship(
+        "Conversation", back_populates="user", cascade="all, delete-orphan"
     )
