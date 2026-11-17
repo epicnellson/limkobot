@@ -56,7 +56,7 @@ function errorMessage(status, data) {
  */
 export async function api(
   path,
-  { method = "GET", body, formData, params, auth = true } = {}
+  { method = "GET", body, formData, params, auth = true, signal } = {}
 ) {
   const url = new URL(BASE_URL + path);
   if (params) {
@@ -81,8 +81,9 @@ export async function api(
 
   let res;
   try {
-    res = await fetch(url, { method, headers, body: payload });
-  } catch {
+    res = await fetch(url, { method, headers, body: payload, signal });
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
     throw new ApiError(
       0,
       "Cannot reach the server. It may be waking up, try again in a moment."
