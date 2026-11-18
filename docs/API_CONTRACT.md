@@ -222,8 +222,8 @@ Response — **200**: array of `document_requests` rows (empty `[]` if none):
 
 ## 8. `POST /admin/knowledge-base` — upload knowledge-base doc
 
-Admin drops a document into the KB for RAG ingestion. Creates a `knowledge_documents` row
-(embedding generation happens in Phase 3).
+Admin drops a document into the KB for RAG ingestion. Creates a `documents` row
+(the same table returned by `GET /documents`; embedding generation happens in Phase 3).
 
 Auth: **Yes** — Bearer, **role must be `admin`** (`admin_users.role`).
 
@@ -232,20 +232,21 @@ Request — multipart `form-data`:
 | Field      | Type              | Required | Description                                  |
 |------------|-------------------|----------|----------------------------------------------|
 | `file`     | file              | Yes      | PDF / .txt / .md / .html (max 10 MB)         |
-| `title`    | string            | Yes      | `knowledge_documents.title`                  |
+| `title`    | string            | Yes      | `documents.title`                            |
 | `category` | string            | No       | e.g. `admissions`, `fees`, `programmes`      |
 
-Response — **201** (`knowledge_documents` row):
+Response — **201** (`documents` row):
 
 | Field         | Type    | Description                               |
 |---------------|---------|-------------------------------------------|
-| `doc_id`      | string  | `knowledge_documents.doc_id`              |
+| `doc_id`      | string  | `documents.id`                            |
 | `title`       | string  |                                           |
 | `category`    | string  | nullable                                  |
-| `embedded`    | boolean | `false` until Phase-3 embedding pass (`embedding_vector` null) |
+| `embedded`    | boolean | `false` until Phase-3 embedding pass (`chunked=false`) |
 | `updated_at`  | string  | ISO-8601                                  |
 
-Errors: **401** no/invalid token, **403** non-admin, **413** file too large.
+Errors: **401** no/invalid token, **403** non-admin, **413** file too large,
+**422** unsupported file type or no readable text.
 
 ---
 

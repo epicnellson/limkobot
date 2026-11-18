@@ -18,4 +18,10 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    files: ["src/components/ui/button.jsx"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
 ])

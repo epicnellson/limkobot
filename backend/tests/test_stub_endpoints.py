@@ -1,10 +1,77 @@
+import uuid
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
+from app.database import get_db
 from app.dependencies import require_admin
 from app.services import stub_data
 from main import app
 
 client = TestClient(app)
+
+
+class _FakeFlagsQuery:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def outerjoin(self, *_args, **_kwargs):
+        return self
+
+    def filter(self, criterion):
+        key = getattr(criterion.left, "key", None)
+        right = criterion.right
+        if hasattr(right, "value"):
+            value = right.value
+        elif type(right).__name__ in ("True_", "False_"):
+            value = type(right).__name__ == "True_"
+        else:
+            raise AssertionError(f"Unsupported filter: {criterion}")
+        self._rows = [
+            row for row in self._rows if getattr(row[0], key) == value
+        ]
+        return self
+
+    def order_by(self, *_args, **_kwargs):
+        return self
+
+    def all(self):
+        return self._rows
+
+
+class _FakeFlagsSession:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def query(self, *_models):
+        return _FakeFlagsQuery(list(self._rows))
+
+
+class _FakeUploadSession:
+    def __init__(self):
+        self.added = []
+
+    def add(self, document):
+        self.added.append(document)
+
+    def commit(self):
+        pass
+
+    def refresh(self, document):
+        now = datetime.now(timezone.utc)
+        if document.id is None:
+            document.id = uuid.uuid4()
+        if document.created_at is None:
+            document.created_at = now
+        if document.updated_at is None:
+            document.updated_at = now
+
+
+def _use_upload_db():
+    session = _FakeUploadSession()
+    app.dependency_overrides[get_db] = lambda: session
+    return session
 
 
 def _as_admin():
@@ -141,18 +208,29 @@ def test_document_request_rejects_another_students_number():
 
 
 def test_admin_knowledge_base_upload():
+    db = _use_upload_db()
     response = client.post(
         "/admin/knowledge-base",
         data={"title": "Fee Schedule 2026", "category": "fees"},
-        files={"file": ("fees.pdf", b"%PDF-1.4 fake fee table", "application/pdf")},
+        files={"file": ("fees.txt", b"Tuition fees for 2026", "text/plain")},
     )
     assert response.status_code == 201
     payload = response.json()
     assert payload["title"] == "Fee Schedule 2026"
+    assert payload["category"] == "fees"
     assert payload["embedded"] is False
+    assert payload["doc_id"]
+
+    assert len(db.added) == 1
+    saved = db.added[0]
+    assert saved.source_type == "txt"
+    assert saved.content == "Tuition fees for 2026"
+    assert saved.category == "fees"
+    assert saved.chunked is False
 
 
 def test_admin_knowledge_base_too_large():
+    _use_upload_db()
     response = client.post(
         "/admin/knowledge-base",
         data={"title": "Big"},
@@ -161,17 +239,55 @@ def test_admin_knowledge_base_too_large():
     assert response.status_code == 413
 
 
-def test_admin_flags_listing_and_filter():
-    phone = "+260760000006"
-    client.post(
-        "/chat/ask",
-        json={"phone_number": phone, "message_text": "Really bad support"},
-        headers=_student_headers(phone),
+def test_admin_knowledge_base_rejects_unsupported_file_type():
+    _use_upload_db()
+    response = client.post(
+        "/admin/knowledge-base",
+        data={"title": "Binary"},
+        files={"file": ("notes.exe", b"binary", "application/octet-stream")},
     )
+    assert response.status_code == 422
+
+
+def test_admin_knowledge_base_rejects_empty_text():
+    _use_upload_db()
+    response = client.post(
+        "/admin/knowledge-base",
+        data={"title": "Blank"},
+        files={"file": ("blank.txt", b"   ", "text/plain")},
+    )
+    assert response.status_code == 422
+
+
+def test_admin_flags_listing_and_filter():
+    flag = SimpleNamespace(
+        flag_id=uuid.uuid4(),
+        log_id=uuid.uuid4(),
+        severity="high",
+        reviewed_by=None,
+        resolved=False,
+    )
+    log = SimpleNamespace(
+        message_text="Really bad support",
+        timestamp=datetime(2026, 11, 17, 12, 0),
+    )
+    app.dependency_overrides[get_db] = lambda: _FakeFlagsSession([(flag, log)])
+
     response = client.get("/admin/flags")
     assert response.status_code == 200
-    assert len(response.json()) == 1
-    assert response.json()[0]["severity"] == "high"
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["flag_id"] == str(flag.flag_id)
+    assert payload[0]["severity"] == "high"
+    assert payload[0]["message_text"] == "Really bad support"
+    assert payload[0]["timestamp"].startswith("2026-11-17T12:00:00")
+    assert payload[0]["resolved"] is False
 
     filtered = client.get("/admin/flags", params={"severity": "low"})
     assert filtered.json() == []
+
+    open_flags = client.get("/admin/flags", params={"resolved": "false"})
+    assert len(open_flags.json()) == 1
+
+    resolved_flags = client.get("/admin/flags", params={"resolved": "true"})
+    assert resolved_flags.json() == []

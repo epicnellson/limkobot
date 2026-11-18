@@ -216,3 +216,5 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Allow the dashboard's src/lib folder (Python "lib/" rule above hides it)
+!dashboard/src/lib/

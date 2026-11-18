@@ -17,7 +17,6 @@ _students = {}
 _conversation_logs = {}
 _document_requests = {}
 _sentiment_flags = {}
-_knowledge_documents = {}
 _otps = {}
 
 OTP_TTL_SECONDS = 5 * 60
@@ -71,7 +70,8 @@ MENU = {
         "intent": "fees",
         "reply": (
             "Fees (2026): application fee USD 100; tuition varies by programme and campus. "
-            "Reply with your programme for the exact schedule, or DOCUMENTS to request the fee table."
+            "Reply with your programme for the exact schedule, "
+            "or DOCUMENTS to request the fee table."
         ),
     },
     "2": {
@@ -120,7 +120,6 @@ def reset() -> None:
         _conversation_logs.clear()
         _document_requests.clear()
         _sentiment_flags.clear()
-        _knowledge_documents.clear()
         _otps.clear()
 
 
@@ -262,7 +261,11 @@ def ask(phone_number: str, message_text: str) -> dict:
     for word in NEGATIVE_WORDS:
         if word in text:
             flag = add_flag(user_message, "high")
-            logger.info("Created sentiment flag %s on log %s", flag["flag_id"], user_message["log_id"])
+            logger.info(
+                "Created sentiment flag %s on log %s",
+                flag["flag_id"],
+                user_message["log_id"],
+            )
             user_message["sentiment_score"] = -0.8
             break
 
@@ -300,19 +303,6 @@ def list_document_requests(phone_number: str) -> list[dict]:
             for request in _document_requests.values()
             if request["student_id"] == student["student_id"]
         ]
-
-
-def add_knowledge_document(title: str, category: str | None, content: str) -> dict:
-    document = {
-        "doc_id": _new_id(),
-        "title": title,
-        "category": category,
-        "embedded": False,
-        "updated_at": _now(),
-    }
-    with _lock:
-        _knowledge_documents[document["doc_id"]] = document
-    return document
 
 
 def list_flags(resolved: bool | None = None, severity: str | None = None) -> list[dict]:
