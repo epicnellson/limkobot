@@ -5,7 +5,7 @@ import time
 
 from fastapi import APIRouter, BackgroundTasks, Request, Response
 
-from app.services import stub_data, whatsapp_service
+from app.services import chat_store, whatsapp_service
 
 router = APIRouter(tags=["webhook"])
 
@@ -47,8 +47,8 @@ def process_message(from_number: str, message_text: str) -> None:
         return
 
     try:
-        result = stub_data.ask(from_number, message_text)
-        reply = result["bot_message"]["message_text"]
+        result = chat_store.answer_message(from_number, message_text)
+        reply = result.get("reply") or result["bot_message"]["message_text"]
         whatsapp_service.send_message(from_number, reply)
     except Exception:
         logger.exception("Failed to reply to %s", from_number)

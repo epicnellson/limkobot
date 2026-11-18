@@ -3,8 +3,8 @@ import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from app.services import reply_engine
 from app.services.auth_service import generate_otp
-from app.services.rag_service import answer as rag_answer
 
 logger = logging.getLogger(__name__)
 
@@ -30,79 +30,11 @@ DOC_TYPES = (
     "other",
 )
 
-RULE_INTENTS = {
-    "greeting": {
-        "keywords": ("hi", "hello", "hey", "good morning", "good afternoon", "good day"),
-        "reply": "Hello! Welcome to Limkokwing University. How can I help you today?",
-    },
-    "fees": {
-        "keywords": ("fee", "tuition", "cost", "price", "payment"),
-        "reply": (
-            "Fees depend on your programme and campus. Reply with a programme name "
-            "for the current fee schedule, or a document request for the full table."
-        ),
-    },
-    "admissions": {
-        "keywords": ("admission", "apply", "enrol", "application", "entry"),
-        "reply": (
-            "To apply, visit the admissions page on limkokwing.net or reply ADMISSIONS "
-            "and I will send the entry requirements."
-        ),
-    },
-    "programmes": {
-        "keywords": ("programme", "course", "degree", "diploma", "study"),
-        "reply": (
-            "We offer diplomas, degrees and postgraduate programmes. Tell me the faculty "
-            "you are interested in and I will list the options."
-        ),
-    },
-    "help": {
-        "keywords": ("help", "support", "contact", "where are you", "location"),
-        "reply": "For help, reply with a keyword like FEES, ADMISSIONS, PROGRAMMES or DOCUMENTS.",
-    },
-}
+RULE_INTENTS = reply_engine.RULE_INTENTS
 
-NEGATIVE_WORDS = ("bad", "anger", "complaint", "disappointed", "annoyed", "refund", "terrible")
+NEGATIVE_WORDS = reply_engine.NEGATIVE_WORDS
 
-# Numbered menu: student sends a single digit, bot answers with that option.
-MENU = {
-    "1": {
-        "intent": "fees",
-        "reply": (
-            "Fees (2026): application fee USD 100; tuition varies by programme and campus. "
-            "Reply with your programme for the exact schedule, "
-            "or DOCUMENTS to request the fee table."
-        ),
-    },
-    "2": {
-        "intent": "exam_schedule",
-        "reply": (
-            "Exam schedule: 2026 final exams run 8-19 June. "
-            "Check faculty notice boards or reply with your programme for the paper timetable."
-        ),
-    },
-    "3": {
-        "intent": "registration",
-        "reply": (
-            "Registration: returning students register online through the student portal "
-            "before semester start. Reply REGISTRATION for a step-by-step guide."
-        ),
-    },
-    "4": {
-        "intent": "programmes",
-        "reply": (
-            "Programmes: diplomas, degrees and postgraduate courses across computing, design, "
-            "business, communication and architecture. Reply with a faculty for the full list."
-        ),
-    },
-    "5": {
-        "intent": "help",
-        "reply": (
-            "How can I help? Reply a number: 1 = Fees, 2 = Exam schedule, "
-            "3 = Registration, 4 = Programmes."
-        ),
-    },
-}
+MENU = reply_engine.MENU
 
 
 def _now() -> str:
@@ -238,36 +170,18 @@ def add_flag(log: dict, severity: str) -> dict:
 
 def ask(phone_number: str, message_text: str) -> dict:
     student = get_or_create_student(phone_number)
-    text = message_text.lower()
 
     user_message = _log_message(student["student_id"], message_text)
-    bot_reply = rag_answer(message_text)
-    intent_type = None
-    routing = "rag"
+    bot_reply, intent_type, routing = reply_engine.select_reply(message_text)
 
-    menu_option = MENU.get(text.strip())
-    if menu_option:
-        intent_type = menu_option["intent"]
-        routing = "menu"
-        bot_reply = menu_option["reply"]
-    else:
-        for name, rule in RULE_INTENTS.items():
-            if any(keyword in text for keyword in rule["keywords"]):
-                intent_type = name
-                routing = "rule"
-                bot_reply = rule["reply"]
-                break
-
-    for word in NEGATIVE_WORDS:
-        if word in text:
-            flag = add_flag(user_message, "high")
-            logger.info(
-                "Created sentiment flag %s on log %s",
-                flag["flag_id"],
-                user_message["log_id"],
-            )
-            user_message["sentiment_score"] = -0.8
-            break
+    if reply_engine.is_negative(message_text):
+        flag = add_flag(user_message, reply_engine.FLAG_SEVERITY)
+        logger.info(
+            "Created sentiment flag %s on log %s",
+            flag["flag_id"],
+            user_message["log_id"],
+        )
+        user_message["sentiment_score"] = reply_engine.NEGATIVE_SCORE
 
     bot_message = _log_message(
         student["student_id"], bot_reply, intent_type=intent_type
