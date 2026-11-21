@@ -24,8 +24,13 @@ class Settings:
     DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5"))
 
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
     LLM_MODEL = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
+    STT_MODEL = os.getenv("STT_MODEL", "whisper-1")
+    TTS_MODEL = os.getenv("TTS_MODEL", "gpt-4o-mini-tts")
+    TTS_VOICE = os.getenv("TTS_VOICE", "alloy")
+    VOICE_REPLIES_ENABLED = os.getenv("VOICE_REPLIES_ENABLED", "true").lower() == "true"
 
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
     JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")

@@ -1,4 +1,4 @@
-"""Database-backed conversation store for WhatsApp messages.
+﻿"""Database-backed conversation store for WhatsApp messages.
 
 Persists students, users, conversations, messages, conversation logs and
 sentiment flags so the dashboard reflects live activity. Falls back to the
@@ -30,7 +30,7 @@ def database_available() -> bool:
     return SessionLocal is not None
 
 
-def answer_message(phone_number: str, message_text: str) -> dict:
+def answer_message(phone_number: str, message_text: str, input_type: str = "text") -> dict:
     if not database_available():
         result = stub_data.ask(phone_number, message_text)
         result["persisted"] = False
@@ -38,7 +38,7 @@ def answer_message(phone_number: str, message_text: str) -> dict:
 
     db = SessionLocal()
     try:
-        result = _answer_in_db(db, phone_number, message_text)
+        result = _answer_in_db(db, phone_number, message_text, input_type)
         db.commit()
         return result
     except Exception:  # noqa: BLE001 - never leave the student without a reply
@@ -51,7 +51,7 @@ def answer_message(phone_number: str, message_text: str) -> dict:
         db.close()
 
 
-def _answer_in_db(db: Session, phone_number: str, message_text: str) -> dict:
+def _answer_in_db(db: Session, phone_number: str, message_text: str, input_type: str = "text") -> dict:
     user, user_created = _get_or_create_user(db, phone_number)
     student, student_created = _get_or_create_student(db, phone_number)
     conversation = _active_conversation(db, user)
@@ -65,7 +65,7 @@ def _answer_in_db(db: Session, phone_number: str, message_text: str) -> dict:
         conversation_id=conversation.id,
         sender="user",
         body=message_text,
-        message_type="text",
+        message_type=input_type,
     )
     db.add(user_message)
 
@@ -150,3 +150,4 @@ def _active_conversation(db: Session, user: User) -> Conversation:
     db.add(conversation)
     db.flush()
     return conversation
+

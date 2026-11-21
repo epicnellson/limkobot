@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +12,7 @@ def answer(query: str, conversation_id: str | None = None) -> str:
     """
     logger.info("RAG stub answer for query=%r conversation=%s", query, conversation_id)
     return (
-        "I'm still learning about Limkokwing University. "
-        "Please check back soon or ask again later."
+        "I'm still learning about Limkokwing University, so I may not have that answer yet.\n\n"
+        "Reply 1 = Fees, 2 = Exam schedule, 3 = Registration, 4 = Programmes, "
+        "5 = Support, or type MENU. A staff member will follow up on anything else."
     )

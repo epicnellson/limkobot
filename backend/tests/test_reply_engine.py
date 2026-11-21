@@ -33,3 +33,17 @@ def test_is_negative_matches_complaint_words():
 def test_welcome_text_lists_menu_options():
     assert "Welcome to Limkokwing University" in reply_engine.WELCOME_TEXT
     assert "1 = Fees" in reply_engine.WELCOME_TEXT
+
+
+def test_menu_word_returns_welcome_text():
+    reply, intent, routing = reply_engine.select_reply("MENU")
+
+    assert routing == "menu"
+    assert intent == "menu"
+    assert "1 = Fees" in reply
+
+
+def test_greeting_uses_word_boundaries():
+    _, _, routing = reply_engine.select_reply("this is fine")
+
+    assert routing == "rag"

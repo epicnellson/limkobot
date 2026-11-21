@@ -1,11 +1,12 @@
-import logging
+﻿import logging
 import os
 import threading
 import time
 
 from fastapi import APIRouter, BackgroundTasks, Request, Response
 
-from app.services import chat_store, whatsapp_service
+from app.config import settings
+from app.services import chat_store, reply_engine, voice_service, whatsapp_service
 
 router = APIRouter(tags=["webhook"])
 
@@ -14,6 +15,24 @@ logger = logging.getLogger(__name__)
 _seen_message_ids: dict[str, float] = {}
 _seen_lock = threading.Lock()
 _SEEN_TTL_SECONDS = 600
+
+_AUDIO_FILENAMES = {
+    "audio/ogg": "voice.ogg",
+    "audio/opus": "voice.opus",
+    "audio/mpeg": "voice.mp3",
+    "audio/mp4": "voice.m4a",
+    "audio/aac": "voice.aac",
+    "audio/amr": "voice.amr",
+}
+
+_UNSUPPORTED_REPLIES = {
+    "image": "I can't read images yet.",
+    "video": "I can't watch videos yet.",
+    "sticker": "I can't read stickers yet.",
+    "document": "I can't open documents yet.",
+    "location": "I can't read locations yet.",
+    "contacts": "I can't read contact cards yet.",
+}
 
 
 def reset_dedupe() -> None:
@@ -38,8 +57,13 @@ def _is_duplicate(message_id: str) -> bool:
         return False
 
 
+def _answer_and_persist(from_number: str, message_text: str, input_type: str = "text") -> str:
+    result = chat_store.answer_message(from_number, message_text, input_type=input_type)
+    return result.get("reply") or result["bot_message"]["message_text"]
+
+
 def process_message(from_number: str, message_text: str) -> None:
-    """Answer an incoming WhatsApp message with a menu/rule/RAG reply."""
+    """Answer an incoming WhatsApp text message with a menu/rule/RAG reply."""
     logger.info("Received WhatsApp message from=%s body=%r", from_number, message_text)
 
     if not message_text.strip():
@@ -47,11 +71,70 @@ def process_message(from_number: str, message_text: str) -> None:
         return
 
     try:
-        result = chat_store.answer_message(from_number, message_text)
-        reply = result.get("reply") or result["bot_message"]["message_text"]
+        reply = _answer_and_persist(from_number, message_text)
         whatsapp_service.send_message(from_number, reply)
     except Exception:
         logger.exception("Failed to reply to %s", from_number)
+
+
+def process_audio_message(from_number: str, media_id: str) -> None:
+    """Transcribe an inbound voice note, answer it, and reply with voice + text."""
+    if not media_id:
+        whatsapp_service.send_message(
+            from_number,
+            "I couldn't open that voice note. Please try again or type your question. "
+            + reply_engine.MENU_HINT,
+        )
+        return
+
+    media = whatsapp_service.download_media(media_id)
+    if media is None:
+        whatsapp_service.send_message(
+            from_number,
+            "I couldn't download that voice note. Please try again or type your question. "
+            + reply_engine.MENU_HINT,
+        )
+        return
+
+    audio_bytes, mime_type = media
+    filename = _AUDIO_FILENAMES.get(mime_type.split(";")[0].strip(), "voice.ogg")
+    transcript = voice_service.transcribe(audio_bytes, filename=filename, content_type=mime_type)
+
+    if not transcript:
+        whatsapp_service.send_message(
+            from_number,
+            "I received your voice note but I can't listen to audio yet. "
+            "Please type your question. " + reply_engine.MENU_HINT,
+        )
+        return
+
+    logger.info("Transcribed voice note from=%s text=%r", from_number, transcript)
+
+    try:
+        reply = _answer_and_persist(from_number, transcript, input_type="audio")
+    except Exception:
+        logger.exception("Failed to answer voice note from %s", from_number)
+        return
+
+    whatsapp_service.send_message(from_number, reply)
+
+    if not settings.VOICE_REPLIES_ENABLED:
+        return
+
+    audio_reply = voice_service.synthesize(reply)
+    if not audio_reply:
+        return
+
+    outbound_media_id = whatsapp_service.upload_media(
+        audio_reply, mime_type="audio/mpeg", filename="reply.mp3"
+    )
+    if outbound_media_id:
+        whatsapp_service.send_audio(from_number, outbound_media_id)
+
+
+def process_unsupported_message(from_number: str, message_type: str) -> None:
+    prefix = _UNSUPPORTED_REPLIES.get(message_type, "I can't read that kind of message yet.")
+    whatsapp_service.send_message(from_number, f"{prefix} {reply_engine.MENU_HINT}")
 
 
 @router.get("/webhook/whatsapp")
@@ -101,7 +184,18 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks) 
                     continue
 
                 from_number = message.get("from", "")
-                message_text = message.get("text", {}).get("body", "")
-                background_tasks.add_task(process_message, from_number, message_text)
+                message_type = str(message.get("type") or "")
+
+                if message_type == "text":
+                    message_text = (message.get("text") or {}).get("body", "")
+                    background_tasks.add_task(process_message, from_number, message_text)
+                elif message_type == "audio":
+                    media_id = str((message.get("audio") or {}).get("id") or "")
+                    background_tasks.add_task(process_audio_message, from_number, media_id)
+                else:
+                    background_tasks.add_task(
+                        process_unsupported_message, from_number, message_type
+                    )
 
     return Response(content="OK", status_code=200)
+
