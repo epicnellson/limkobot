@@ -47,3 +47,26 @@ def test_greeting_uses_word_boundaries():
     _, _, routing = reply_engine.select_reply("this is fine")
 
     assert routing == "rag"
+
+
+def test_llm_fallback_used_when_available(monkeypatch):
+    monkeypatch.setattr(reply_engine, "llm_answer", lambda _text: "Krio answer")
+
+    reply, intent, routing = reply_engine.select_reply("Aw di tin de go naw?")
+
+    assert reply == "Krio answer"
+    assert intent is None
+    assert routing == "llm"
+
+
+def test_krio_greeting_matches_rule():
+    _, intent, routing = reply_engine.select_reply("Kushɛ, aw yu du")
+
+    assert routing == "rule"
+    assert intent == "greeting"
+
+
+def test_krio_thanks_matches_rule():
+    _, intent, _ = reply_engine.select_reply("Tɛnki papa")
+
+    assert intent == "thanks"

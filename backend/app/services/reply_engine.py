@@ -1,5 +1,13 @@
-﻿import re
+﻿"""Deterministic reply selection for WhatsApp and chat messages.
 
+Shared by the in-memory stub store and the database-backed store so both
+paths answer identically. Unmatched messages fall back to the free Groq
+LLM, then to the RAG stub.
+"""
+
+import re
+
+from app.services.llm_service import answer as llm_answer
 from app.services.rag_service import answer as rag_answer
 
 WELCOME_TEXT = (
@@ -15,15 +23,36 @@ WELCOME_TEXT = (
 
 MENU_HINT = "Reply 1 = Fees, 2 = Exam schedule, 3 = Registration, 4 = Programmes, 5 = Support."
 
-GREETING_WORDS = ("hi", "hey")
+BOUNDARY_WORDS = ("hi", "hey", "aro", "arɔ")
 
 RULE_INTENTS = {
     "greeting": {
-        "keywords": ("hi", "hello", "hey", "good morning", "good afternoon", "good day"),
+        "keywords": (
+            "hi",
+            "hello",
+            "hey",
+            "good morning",
+            "good afternoon",
+            "good day",
+            "kushɛ",
+            "kushe",
+            "aw yu du",
+            "aw di body",
+            "how yu de",
+        ),
         "reply": WELCOME_TEXT,
     },
     "fees": {
-        "keywords": ("fee", "tuition", "cost", "price", "payment"),
+        "keywords": (
+            "fee",
+            "tuition",
+            "cost",
+            "price",
+            "payment",
+            "kost",
+            "kɔst",
+            "how much",
+        ),
         "reply": (
             "Fees depend on your programme and campus. Reply with a programme name "
             "for the current fee schedule, or DOCUMENTS for the full fee table."
@@ -72,11 +101,11 @@ RULE_INTENTS = {
         ),
     },
     "thanks": {
-        "keywords": ("thank", "thanks", "appreciate"),
+        "keywords": ("thank", "thanks", "appreciate", "tenki", "tɛnki"),
         "reply": "You're welcome! Is there anything else I can help you with? " + MENU_HINT,
     },
     "bye": {
-        "keywords": ("bye", "goodbye", "see you"),
+        "keywords": ("bye", "goodbye", "see you", "aro", "arɔ"),
         "reply": "Goodbye and good luck with your studies at Limkokwing University!",
     },
 }
@@ -129,7 +158,7 @@ MENU = {
 
 
 def _matches(text: str, keyword: str) -> bool:
-    if keyword in GREETING_WORDS:
+    if keyword in BOUNDARY_WORDS:
         return re.search(rf"\b{re.escape(keyword)}\b", text) is not None
     return keyword in text
 
@@ -148,6 +177,10 @@ def select_reply(message_text: str) -> tuple[str, str | None, str]:
     for name, rule in RULE_INTENTS.items():
         if any(_matches(text, keyword) for keyword in rule["keywords"]):
             return rule["reply"], name, "rule"
+
+    generated = llm_answer(message_text)
+    if generated:
+        return generated, None, "llm"
 
     return rag_answer(message_text), None, "rag"
 
