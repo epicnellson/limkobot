@@ -1,4 +1,4 @@
-import os
+﻿import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -28,6 +28,11 @@ class Settings:
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
     LLM_MODEL = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
     STT_MODEL = os.getenv("STT_MODEL", "whisper-1")
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+    GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+    GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
+    EDGE_TTS_ENABLED = os.getenv("EDGE_TTS_ENABLED", "true").lower() == "true"
+    EDGE_TTS_VOICE = os.getenv("EDGE_TTS_VOICE", "en-US-AriaNeural")
     TTS_MODEL = os.getenv("TTS_MODEL", "gpt-4o-mini-tts")
     TTS_VOICE = os.getenv("TTS_VOICE", "alloy")
     VOICE_REPLIES_ENABLED = os.getenv("VOICE_REPLIES_ENABLED", "true").lower() == "true"
