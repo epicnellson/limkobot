@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.schemas.auth import UserOut
 from app.schemas.sentiment import SentimentFlagOut
+from app.services import voice_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -236,6 +237,11 @@ def list_sentiment_flags(
             }
         )
     return flags
+
+
+@router.get("/diagnostics/voice", response_model=dict)
+def voice_diagnostics(_admin: User = Depends(require_admin)) -> dict:
+    return voice_service.diagnostics()
 
 
 @router.get("/analytics/feedback", response_model=dict)

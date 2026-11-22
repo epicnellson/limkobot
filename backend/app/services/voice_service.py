@@ -15,6 +15,23 @@ logger = logging.getLogger(__name__)
 TRANSCRIBE_TIMEOUT_SECONDS = 60
 SPEECH_TIMEOUT_SECONDS = 60
 
+_last_errors: dict[str, str] = {}
+
+
+def _record_error(kind: str, message: str) -> None:
+    _last_errors[kind] = message[:400]
+
+
+def diagnostics() -> dict:
+    return {
+        "openai_key_configured": bool(settings.OPENAI_API_KEY),
+        "stt_model": settings.STT_MODEL,
+        "tts_model": settings.TTS_MODEL,
+        "tts_voice": settings.TTS_VOICE,
+        "voice_replies_enabled": settings.VOICE_REPLIES_ENABLED,
+        "last_errors": dict(_last_errors),
+    }
+
 
 def transcribe(
     audio_bytes: bytes,
@@ -24,6 +41,7 @@ def transcribe(
     if not settings.OPENAI_API_KEY or not audio_bytes:
         if not settings.OPENAI_API_KEY:
             logger.warning("OPENAI_API_KEY is not configured; cannot transcribe audio")
+            _record_error("transcribe", "OPENAI_API_KEY is not configured")
         return None
 
     url = f"{settings.OPENAI_BASE_URL}/audio/transcriptions"
@@ -34,17 +52,26 @@ def transcribe(
     try:
         with httpx.Client(timeout=TRANSCRIBE_TIMEOUT_SECONDS) as client:
             response = client.post(url, headers=headers, files=files, data=data)
-        if response.status_code >= 400:
-            logger.warning(
-                "Speech-to-text HTTP %s (model=%s): %s",
-                response.status_code,
-                settings.STT_MODEL,
-                response.text[:400],
-            )
-        response.raise_for_status()
+    except Exception as exc:  # noqa: BLE001 - voice is best-effort
+        logger.exception("Speech-to-text request failed")
+        _record_error("transcribe", f"{type(exc).__name__}: {exc}")
+        return None
+
+    if response.status_code >= 400:
+        logger.warning(
+            "Speech-to-text HTTP %s (model=%s): %s",
+            response.status_code,
+            settings.STT_MODEL,
+            response.text[:400],
+        )
+        _record_error("transcribe", f"HTTP {response.status_code}: {response.text[:200]}")
+        return None
+
+    try:
         text = (response.json().get("text") or "").strip()
-    except Exception:  # noqa: BLE001 - voice is best-effort
-        logger.exception("Speech-to-text failed")
+    except Exception as exc:  # noqa: BLE001 - voice is best-effort
+        logger.exception("Speech-to-text response was not JSON")
+        _record_error("transcribe", f"{type(exc).__name__}: {exc}")
         return None
 
     return text or None
@@ -54,6 +81,7 @@ def synthesize(text: str) -> bytes | None:
     if not settings.OPENAI_API_KEY or not text.strip():
         if not settings.OPENAI_API_KEY:
             logger.warning("OPENAI_API_KEY is not configured; cannot synthesize audio")
+            _record_error("synthesize", "OPENAI_API_KEY is not configured")
         return None
 
     url = f"{settings.OPENAI_BASE_URL}/audio/speech"
@@ -71,17 +99,19 @@ def synthesize(text: str) -> bytes | None:
     try:
         with httpx.Client(timeout=SPEECH_TIMEOUT_SECONDS) as client:
             response = client.post(url, headers=headers, json=payload)
-        if response.status_code >= 400:
-            logger.warning(
-                "Text-to-speech HTTP %s (model=%s): %s",
-                response.status_code,
-                settings.TTS_MODEL,
-                response.text[:400],
-            )
-        response.raise_for_status()
-        audio = response.content
-    except Exception:  # noqa: BLE001 - voice is best-effort
-        logger.exception("Text-to-speech failed")
+    except Exception as exc:  # noqa: BLE001 - voice is best-effort
+        logger.exception("Text-to-speech request failed")
+        _record_error("synthesize", f"{type(exc).__name__}: {exc}")
         return None
 
-    return audio or None
+    if response.status_code >= 400:
+        logger.warning(
+            "Text-to-speech HTTP %s (model=%s): %s",
+            response.status_code,
+            settings.TTS_MODEL,
+            response.text[:400],
+        )
+        _record_error("synthesize", f"HTTP {response.status_code}: {response.text[:200]}")
+        return None
+
+    return response.content or None
