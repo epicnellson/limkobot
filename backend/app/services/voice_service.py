@@ -22,6 +22,8 @@ def transcribe(
     content_type: str = "audio/ogg",
 ) -> str | None:
     if not settings.OPENAI_API_KEY or not audio_bytes:
+        if not settings.OPENAI_API_KEY:
+            logger.warning("OPENAI_API_KEY is not configured; cannot transcribe audio")
         return None
 
     url = f"{settings.OPENAI_BASE_URL}/audio/transcriptions"
@@ -32,6 +34,13 @@ def transcribe(
     try:
         with httpx.Client(timeout=TRANSCRIBE_TIMEOUT_SECONDS) as client:
             response = client.post(url, headers=headers, files=files, data=data)
+        if response.status_code >= 400:
+            logger.warning(
+                "Speech-to-text HTTP %s (model=%s): %s",
+                response.status_code,
+                settings.STT_MODEL,
+                response.text[:400],
+            )
         response.raise_for_status()
         text = (response.json().get("text") or "").strip()
     except Exception:  # noqa: BLE001 - voice is best-effort
@@ -43,6 +52,8 @@ def transcribe(
 
 def synthesize(text: str) -> bytes | None:
     if not settings.OPENAI_API_KEY or not text.strip():
+        if not settings.OPENAI_API_KEY:
+            logger.warning("OPENAI_API_KEY is not configured; cannot synthesize audio")
         return None
 
     url = f"{settings.OPENAI_BASE_URL}/audio/speech"
@@ -60,6 +71,13 @@ def synthesize(text: str) -> bytes | None:
     try:
         with httpx.Client(timeout=SPEECH_TIMEOUT_SECONDS) as client:
             response = client.post(url, headers=headers, json=payload)
+        if response.status_code >= 400:
+            logger.warning(
+                "Text-to-speech HTTP %s (model=%s): %s",
+                response.status_code,
+                settings.TTS_MODEL,
+                response.text[:400],
+            )
         response.raise_for_status()
         audio = response.content
     except Exception:  # noqa: BLE001 - voice is best-effort
