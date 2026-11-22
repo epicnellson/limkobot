@@ -70,3 +70,25 @@ def test_krio_thanks_matches_rule():
     _, intent, _ = reply_engine.select_reply("Tɛnki papa")
 
     assert intent == "thanks"
+
+
+def test_krio_question_prefers_llm_over_fee_rule(monkeypatch):
+    monkeypatch.setattr(reply_engine, "llm_answer", lambda _text: "Krio fee answer")
+
+    reply, intent, routing = reply_engine.select_reply("Aw much di fees naw?")
+
+    assert reply == "Krio fee answer"
+    assert intent is None
+    assert routing == "llm"
+
+
+def test_english_fee_question_stays_rule():
+    _, intent, routing = reply_engine.select_reply("How much are the fees?")
+
+    assert intent == "fees"
+    assert routing == "rule"
+
+
+def test_looks_krio_detection():
+    assert reply_engine._looks_krio("Aw yu du, mi want know") is True
+    assert reply_engine._looks_krio("How much are the fees?") is False

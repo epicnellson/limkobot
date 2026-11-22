@@ -157,6 +157,33 @@ MENU = {
 }
 
 
+KRIO_MARKERS = {
+    "aw",
+    "di",
+    "mi",
+    "yu",
+    "wetin",
+    "naw",
+    "una",
+    "abeg",
+    "tenki",
+    "tɛnki",
+    "kushɛ",
+    "kushe",
+    "bɔku",
+    "smɔl",
+    "padi",
+    "dɔn",
+    "na",
+    "de",
+}
+
+
+def _looks_krio(text: str) -> bool:
+    tokens = set(re.findall(r"[a-zɛɔ]+", text))
+    return len(tokens & KRIO_MARKERS) >= 2
+
+
 def _matches(text: str, keyword: str) -> bool:
     if keyword in BOUNDARY_WORDS:
         return re.search(rf"\b{re.escape(keyword)}\b", text) is not None
@@ -173,6 +200,11 @@ def select_reply(message_text: str) -> tuple[str, str | None, str]:
 
     if text in MENU_TRIGGERS:
         return WELCOME_TEXT, "menu", "menu"
+
+    if _looks_krio(text):
+        generated = llm_answer(message_text)
+        if generated:
+            return generated, None, "llm"
 
     for name, rule in RULE_INTENTS.items():
         if any(_matches(text, keyword) for keyword in rule["keywords"]):
