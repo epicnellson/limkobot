@@ -92,3 +92,18 @@ def test_english_fee_question_stays_rule():
 def test_looks_krio_detection():
     assert reply_engine._looks_krio("Aw yu du, mi want know") is True
     assert reply_engine._looks_krio("How much are the fees?") is False
+
+
+def test_krio_greeting_gets_krio_welcome():
+    reply, intent, routing = reply_engine.select_reply("Kushɛ")
+
+    assert intent == "greeting"
+    assert routing == "rule"
+    assert "Wɛlkɔm" in reply
+
+
+def test_english_greeting_gets_english_welcome():
+    reply, intent, _ = reply_engine.select_reply("Hello")
+
+    assert intent == "greeting"
+    assert reply.startswith("Welcome to Limkokwing University")

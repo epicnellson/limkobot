@@ -23,6 +23,17 @@ WELCOME_TEXT = (
 
 MENU_HINT = "Reply 1 = Fees, 2 = Exam schedule, 3 = Registration, 4 = Programmes, 5 = Support."
 
+KRIO_WELCOME_TEXT = (
+    "Kushɛ! Wɛlkɔm na Limkokwing University. Aw a go ɛp yu tide?\n\n"
+    "Riplai nɔmba:\n"
+    "1 = Fees\n"
+    "2 = Ɛksam shɛdul\n"
+    "3 = Rɛjistrɛshɔn\n"
+    "4 = Prɔgram dɛm\n"
+    "5 = Kɔntakt ɔfis\n\n"
+    "Ɔ yu kin rait yu kwɛstyɔn ɛn a go ɛp yu."
+)
+
 BOUNDARY_WORDS = ("hi", "hey", "aro", "arɔ")
 
 RULE_INTENTS = {
@@ -179,6 +190,13 @@ KRIO_MARKERS = {
 }
 
 
+KRIO_GREETINGS = ("kushɛ", "kushe", "aw yu du", "aw di body", "how yu de")
+
+
+def _is_krio(text: str) -> bool:
+    return _looks_krio(text) or any(greeting in text for greeting in KRIO_GREETINGS)
+
+
 def _looks_krio(text: str) -> bool:
     tokens = set(re.findall(r"[a-zɛɔ]+", text))
     return len(tokens & KRIO_MARKERS) >= 2
@@ -208,6 +226,8 @@ def select_reply(message_text: str) -> tuple[str, str | None, str]:
 
     for name, rule in RULE_INTENTS.items():
         if any(_matches(text, keyword) for keyword in rule["keywords"]):
+            if name == "greeting" and _is_krio(text):
+                return KRIO_WELCOME_TEXT, name, "rule"
             return rule["reply"], name, "rule"
 
     generated = llm_answer(message_text)
