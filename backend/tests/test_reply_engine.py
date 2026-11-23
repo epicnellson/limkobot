@@ -32,7 +32,7 @@ def test_is_negative_matches_complaint_words():
 
 def test_welcome_text_lists_menu_options():
     assert "Welcome to Limkokwing University" in reply_engine.WELCOME_TEXT
-    assert "1 = Fees" in reply_engine.WELCOME_TEXT
+    assert "1. Fees" in reply_engine.WELCOME_TEXT
 
 
 def test_menu_word_returns_welcome_text():
@@ -40,7 +40,7 @@ def test_menu_word_returns_welcome_text():
 
     assert routing == "menu"
     assert intent == "menu"
-    assert "1 = Fees" in reply
+    assert "1. Fees" in reply
 
 
 def test_greeting_uses_word_boundaries():
@@ -107,3 +107,11 @@ def test_english_greeting_gets_english_welcome():
 
     assert intent == "greeting"
     assert reply.startswith("Welcome to Limkokwing University")
+def test_ad_prefill_counts_as_greeting():
+    reply, intent, routing = reply_engine.select_reply(
+        "Hello! I am interested in learning more about Limkokwing University"
+    )
+
+    assert intent == "greeting"
+    assert routing == "rule"
+    assert "1. Fees" in reply

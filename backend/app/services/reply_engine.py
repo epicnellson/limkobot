@@ -1,4 +1,4 @@
-﻿"""Deterministic reply selection for WhatsApp and chat messages.
+"""Deterministic reply selection for WhatsApp and chat messages.
 
 Shared by the in-memory stub store and the database-backed store so both
 paths answer identically. Unmatched messages fall back to the free Groq
@@ -13,24 +13,24 @@ from app.services.rag_service import answer as rag_answer
 WELCOME_TEXT = (
     "Welcome to Limkokwing University! How can I help you today?\n\n"
     "Reply a number:\n"
-    "1 = Fees\n"
-    "2 = Exam schedule\n"
-    "3 = Registration\n"
-    "4 = Programmes\n"
-    "5 = Talk to support\n\n"
+    "1. Fees\n"
+    "2. Exam schedule\n"
+    "3. Registration\n"
+    "4. Programmes\n"
+    "5. Talk to support\n\n"
     "Or type your question and I will do my best to help."
 )
 
-MENU_HINT = "Reply 1 = Fees, 2 = Exam schedule, 3 = Registration, 4 = Programmes, 5 = Support."
+MENU_HINT = "Reply 1. Fees, 2. Exam schedule, 3. Registration, 4. Programmes, 5. Support."
 
 KRIO_WELCOME_TEXT = (
     "Kushɛ! Wɛlkɔm na Limkokwing University. Aw a go ɛp yu tide?\n\n"
     "Riplai nɔmba:\n"
-    "1 = Fees\n"
-    "2 = Ɛksam shɛdul\n"
-    "3 = Rɛjistrɛshɔn\n"
-    "4 = Prɔgram dɛm\n"
-    "5 = Kɔntakt ɔfis\n\n"
+    "1. Fees\n"
+    "2. Ɛksam shɛdul\n"
+    "3. Rɛjistrɛshɔn\n"
+    "4. Prɔgram dɛm\n"
+    "5. Kɔntakt ɔfis\n\n"
     "Ɔ yu kin rait yu kwɛstyɔn ɛn a go ɛp yu."
 )
 
@@ -50,6 +50,9 @@ RULE_INTENTS = {
             "aw yu du",
             "aw di body",
             "how yu de",
+            "interested in learning more",
+            "learn more about limkokwing",
+            "know more about limkokwing",
         ),
         "reply": WELCOME_TEXT,
     },
@@ -162,7 +165,7 @@ MENU = {
         "intent": "help",
         "reply": (
             "Support: a staff member will follow up on your question. Meanwhile, "
-            "you can reply 1 = Fees, 2 = Exam schedule, 3 = Registration, 4 = Programmes."
+            "you can reply 1. Fees, 2. Exam schedule, 3. Registration, 4. Programmes."
         ),
     },
 }
