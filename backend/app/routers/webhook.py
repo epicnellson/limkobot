@@ -58,8 +58,12 @@ def _is_duplicate(message_id: str) -> bool:
 
 
 def _answer_and_persist(from_number: str, message_text: str, input_type: str = "text") -> str:
-    result = chat_store.answer_message(from_number, message_text, input_type=input_type)
-    return result.get("reply") or result["bot_message"]["message_text"]
+    reply, intent_type, routing = chat_store.quick_reply(from_number, message_text)
+    whatsapp_service.send_message(from_number, reply)
+    chat_store.record_exchange(
+        from_number, message_text, reply, intent_type, routing, input_type=input_type
+    )
+    return reply
 
 
 def process_message(from_number: str, message_text: str) -> None:
@@ -71,8 +75,7 @@ def process_message(from_number: str, message_text: str) -> None:
         return
 
     try:
-        reply = _answer_and_persist(from_number, message_text)
-        whatsapp_service.send_message(from_number, reply)
+        _answer_and_persist(from_number, message_text)
     except Exception:
         logger.exception("Failed to reply to %s", from_number)
 
@@ -115,8 +118,6 @@ def process_audio_message(from_number: str, media_id: str) -> None:
     except Exception:
         logger.exception("Failed to answer voice note from %s", from_number)
         return
-
-    whatsapp_service.send_message(from_number, reply)
 
     if not settings.VOICE_REPLIES_ENABLED:
         return

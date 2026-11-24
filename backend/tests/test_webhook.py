@@ -313,12 +313,15 @@ def test_process_audio_replies_with_voice_and_text(monkeypatch):
     sent = {"text": None, "audio": None}
     answered = {}
 
-    def fake_answer(phone_number, message_text, input_type="text"):
+    def fake_quick_reply(phone_number, message_text):
         answered["text"] = message_text
-        answered["input_type"] = input_type
-        return {"reply": "Here are the fees."}
+        return "Here are the fees.", None, "rag"
 
-    monkeypatch.setattr(webhook.chat_store, "answer_message", fake_answer)
+    def fake_record(phone_number, message_text, reply, intent_type, routing, input_type="text"):
+        answered["input_type"] = input_type
+
+    monkeypatch.setattr(webhook.chat_store, "quick_reply", fake_quick_reply)
+    monkeypatch.setattr(webhook.chat_store, "record_exchange", fake_record)
     monkeypatch.setattr(
         webhook.whatsapp_service, "download_media", lambda _id: (b"audio", "audio/ogg")
     )
@@ -346,10 +349,11 @@ def test_process_audio_replies_with_voice_and_text(monkeypatch):
 def test_process_audio_skips_voice_reply_when_disabled(monkeypatch):
     sent = {"audio": None}
 
-    def fake_answer(phone_number, message_text, input_type="text"):
-        return {"reply": "Text only reply."}
+    def fake_quick_reply(phone_number, message_text):
+        return "Text only reply.", None, "rag"
 
-    monkeypatch.setattr(webhook.chat_store, "answer_message", fake_answer)
+    monkeypatch.setattr(webhook.chat_store, "quick_reply", fake_quick_reply)
+    monkeypatch.setattr(webhook.chat_store, "record_exchange", lambda *a, **k: None)
     monkeypatch.setattr(webhook.settings, "VOICE_REPLIES_ENABLED", False)
     monkeypatch.setattr(
         webhook.whatsapp_service, "download_media", lambda _id: (b"audio", "audio/ogg")

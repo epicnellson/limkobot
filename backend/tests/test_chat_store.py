@@ -26,3 +26,19 @@ def test_database_available_reflects_session_maker(monkeypatch):
 
     monkeypatch.setattr(chat_store, "SessionLocal", None)
     assert chat_store.database_available() is False
+
+
+def test_quick_reply_without_database_uses_rules(monkeypatch):
+    monkeypatch.setattr(chat_store, "SessionLocal", None)
+
+    reply, intent, routing = chat_store.quick_reply("155501234567", "Hi")
+
+    assert "Limkokwing" in reply
+    assert intent == "greeting"
+    assert routing == "rule"
+
+
+def test_record_exchange_without_database_is_noop(monkeypatch):
+    monkeypatch.setattr(chat_store, "SessionLocal", None)
+
+    assert chat_store.record_exchange("155501234567", "Hi", "Hello", "greeting", "rule") is False

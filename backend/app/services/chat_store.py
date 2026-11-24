@@ -7,6 +7,7 @@ student still receives a reply.
 """
 
 import logging
+import threading
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -25,9 +26,67 @@ from app.services import reply_engine, stub_data
 
 logger = logging.getLogger(__name__)
 
+_known_numbers: set[str] = set()
+_known_lock = threading.Lock()
+
 
 def database_available() -> bool:
     return SessionLocal is not None
+
+
+def quick_reply(phone_number: str, message_text: str) -> tuple[str, str | None, str]:
+    """Answer without waiting on database writes so the student is served fast."""
+    if database_available():
+        with _known_lock:
+            known = phone_number in _known_numbers
+        if not known:
+            db = SessionLocal()
+            try:
+                exists = (
+                    db.query(Student.student_id)
+                    .filter(Student.phone_number == phone_number)
+                    .first()
+                    is not None
+                )
+            except Exception:  # noqa: BLE001 - still answer the student
+                logger.exception("Student lookup failed for %s; replying anyway", phone_number)
+                exists = True
+            finally:
+                db.close()
+            if exists:
+                with _known_lock:
+                    _known_numbers.add(phone_number)
+            else:
+                return reply_engine.WELCOME_TEXT, "welcome", "welcome"
+
+    return reply_engine.select_reply(message_text)
+
+
+def record_exchange(
+    phone_number: str,
+    message_text: str,
+    reply: str,
+    intent_type: str | None,
+    routing: str,
+    input_type: str = "text",
+) -> bool:
+    """Persist an already-sent exchange in the background; never blocks the reply."""
+    if not database_available():
+        return False
+
+    db = SessionLocal()
+    try:
+        _persist_exchange(db, phone_number, message_text, reply, intent_type, routing, input_type)
+        db.commit()
+        with _known_lock:
+            _known_numbers.add(phone_number)
+        return True
+    except Exception:  # noqa: BLE001 - persistence must not break the chat
+        db.rollback()
+        logger.exception("Failed to persist exchange for %s", phone_number)
+        return False
+    finally:
+        db.close()
 
 
 def answer_message(phone_number: str, message_text: str, input_type: str = "text") -> dict:
@@ -40,6 +99,8 @@ def answer_message(phone_number: str, message_text: str, input_type: str = "text
     try:
         result = _answer_in_db(db, phone_number, message_text, input_type)
         db.commit()
+        with _known_lock:
+            _known_numbers.add(phone_number)
         return result
     except Exception:  # noqa: BLE001 - never leave the student without a reply
         db.rollback()
@@ -52,14 +113,30 @@ def answer_message(phone_number: str, message_text: str, input_type: str = "text
 
 
 def _answer_in_db(db: Session, phone_number: str, message_text: str, input_type: str = "text") -> dict:
-    user, user_created = _get_or_create_user(db, phone_number)
     student, student_created = _get_or_create_student(db, phone_number)
-    conversation = _active_conversation(db, user)
 
     if student_created:
         reply, intent_type, routing = reply_engine.WELCOME_TEXT, "welcome", "welcome"
     else:
         reply, intent_type, routing = reply_engine.select_reply(message_text)
+
+    return _persist_exchange(
+        db, phone_number, message_text, reply, intent_type, routing, input_type
+    )
+
+
+def _persist_exchange(
+    db: Session,
+    phone_number: str,
+    message_text: str,
+    reply: str,
+    intent_type: str | None,
+    routing: str,
+    input_type: str = "text",
+) -> dict:
+    user, user_created = _get_or_create_user(db, phone_number)
+    student, student_created = _get_or_create_student(db, phone_number)
+    conversation = _active_conversation(db, user)
 
     user_message = Message(
         conversation_id=conversation.id,
